@@ -197,11 +197,13 @@ By default, templates are only parsed once, when they’re first used, and the r
 subsequent use. This behaviour can be changed by setting the appropriate template caching property (depends on the 
 templating library) to false:
 
-| Template | Cache enable property |
-| FreeMarker | spring.freemarker.cache |
+
+| Template         | Cache enable property        |
+| ---------------- | ---------------------------- |
+| FreeMarker       | spring.freemarker.cache      |
 | Groovy Templates | spring.groovy.template.cache |
-| Mustache | spring.mustache.cache |
-| Thymeleaf | spring.thymeleaf.cache |
+| Mustache         | spring.mustache.cache        |
+| Thymeleaf        | spring.thymeleaf.cache       |
 
 One option is to set the above property in a profile so it is not deployed in production.
 
