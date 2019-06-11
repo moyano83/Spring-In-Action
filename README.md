@@ -4,6 +4,7 @@
 1. [Chapter 1: Getting started with Spring](#Chapter1)
 2. [Chapter 2: Developing web applications](#Chapter2)
 3. [Chapter 3: Working with data](#Chapter3)
+4. [Chapter 4: Securing Spring](#Chapter4)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -209,3 +210,125 @@ One option is to set the above property in a profile so it is not deployed in pr
 
 
 ## Chapter 3: Working with data<a name="Chapter3"></a>
+
+Spring JDBC support is rooted in the JdbcTemplate class. JdbcTemplate provides a means by which developers can perform SQL
+ operations against a relational database.
+ 
+```java
+class IngredientDAO{
+
+    private JdbcTemplate jdbc;
+
+    @Override
+    public Ingredient findOne(String id) {
+      return jdbc.queryForObject(
+          "select id, name, type from Ingredient where id=?",
+          this::mapRowToIngredient, id);
+    }
+    private Ingredient mapRowToIngredient(ResultSet rs, int rowNum)
+        throws SQLException {
+      return new Ingredient(
+          rs.getString("id"),
+          rs.getString("name"),
+          Ingredient.Type.valueOf(rs.getString("type")));
+    }
+}
+```
+
+Support for JdbcTemplate is given in the package
+
+```xml
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-jdbc</artifactId>
+</dependency>
+```
+
+The `query()` method accepts the SQL for the query as well as an implementation of Spring’s RowMapper for the purpose of 
+mapping each row in the result set to an object. `queryForObject()` works much like `query()` except that it returns a single
+ object instead of a List of objects. _JdbcTemplate’s_ `update()` method can be used for any query that writes or updates 
+ data in the database.
+One important thing to know, is that if there’s a file named _schema.sql_ in the root of the application’s classpath, then
+ the SQL in that file will be executed against the database when the application starts. Spring Boot will also execute a 
+ file named _data.sql_ from the root of the classpath when the application starts.
+ 
+### Inserting data
+Two ways to save data with JdbcTemplate include the following:
+
+    * Directly, using the update() method
+    * Using the SimpleJdbcInsert wrapper class
+    
+_@SessionAttributes_ (class annotation) and _@ModelAttribute_ (method annotation) ensures that an object of the type 
+annotated by this will be created in the model. The _@SessionAttributes_ annotation specifies any model objects that 
+should be kept in session and available across multiple requests. The parameter annotated with @ModelAttribute  is to 
+indicate that its value should come from the model and that Spring MVC  shouldn't attempt to bind request parameters to it.
+Once the object is saved, you don’t need it hanging around in a session anymore. In fact, if you don’t clean it out, the 
+object remains in session and the next order will start with whatever state the session was left in. 
+
+_SimpleJdbcInsert_ is an object that wraps JdbcTemplate to make it easier to insert data into a table.
+SimpleJdbcInsert has a couple of useful methods for executing the insert: _execute()_ and _executeAndReturnKey()_. Both 
+accept a Map<String, Object>, where the map keys correspond to the column names in the table the data is inserted into. 
+The map values are inserted into those columns.
+
+### Persisting data with Spring Data JPA
+The Spring Data project is a rather large umbrella project comprised of several sub-projects: Spring Data JPA, Spring Data 
+MongoDB, Spring Data Neo4j, Spring Data Redis and Spring Data Cassandra. Spring Data has the ability to automatically 
+create repositories for all of these projects. 
+To include Spring JPA use:
+
+```xml
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-data-jpa</artifactId>
+</dependency>
+```
+
+In order to declare an Object as a JPA entity, it must be annotated with _@Entity_, and its id property must be annotated 
+with @Id to designate it as the property that will uniquely identify the entity in the database. JPA requires that 
+entities have a no-arguments constructor, so Lombok’s _@NoArgsConstructor_ does that for you (if you don't want to use it, 
+set the access attribute to _AccessLevel.PRIVATE_). When a @NoArgsConstructor is used, the constructor with args gets 
+removed. An explicit _@RequiredArgsConstructor_ ensures that you’llstill have a required arguments constructor in addition 
+to the private no-arguments constructor.
+The _@PrePersist_ annotation allows you to set a property value before the object is persisted (i.e. a timestamp).
+_@Table_ specifies the name of the table this annotated entity should be persisted to.
+With Spring Data, you can extend the _CrudRepository_ interface, when the application starts, Spring Data JPA  would make 
+available a dozen methods for create, update, delete and select, and it will automatically generates an implementation on 
+the fly for those (given the parameterized class it deals with, and the type of its id). It is also possible to customize 
+the methods you might need inside the repositories, Spring Data examines any methods in the repository interface, parses 
+the method name, and attempts to understand the method’s purpose in the context of the persisted object. 
+Repository methods are composed of a verb, an optional subject, the word By, and a predicate:
+
+    * Spring Data also understands find, read, and get as synonymous for fetching one or more entities
+    * You can also use count as the verb if you only want the method to return an int with the count of matching entities
+    * Use 'And' as the conjunction to joint to properties as in 'findByUserNameAndEmail(...)'
+    * Use Between to define a value that must fall between the given range
+    * The method parameter order must match that in the method name
+
+In addition to an implicit Equals operation and the Between operation, Spring Data method signatures can also include any 
+of these operators:
+
+    * IsAfter, After, IsGreaterThan, GreaterThan  IsGreaterThanEqual, GreaterThanEqual
+    * IsBefore, Before, IsLessThan, LessThan
+    * IsLessThanEqual, LessThanEqual
+    * IsBetween, Between 
+    * IsNull, Null
+    * IsNotNull, NotNull 
+    * IsIn, In
+    * IsNotIn, NotIn
+    * IsStartingWith, StartingWith, StartsWith 
+    * IsEndingWith, EndingWith, EndsWith 
+    * IsContaining, Containing, Contains 
+    * IsLike, Like
+    * IsNotLike, NotLike
+    * IsTrue, True
+    * IsFalse, False
+    * Is, Equals
+    * IsNot, Not
+    * IgnoringCase, IgnoresCase, AllIgnoreCase (to ignore case for all String comparisons)
+    
+Finally, you can also place OrderBy at the end of the method name to sort the results by a specified column. If the naming
+ convention gets too complex, you can also use _@Query_ to explicitly specify the query to be performed when the method is
+ called. 
+    
+
+## Chapter 4: Securing Spring<a name="Chapter4"></a>
