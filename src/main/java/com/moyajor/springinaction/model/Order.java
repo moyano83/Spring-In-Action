@@ -3,10 +3,7 @@ package com.moyajor.springinaction.model;
 import lombok.Data;
 import org.hibernate.validator.constraints.CreditCardNumber;
 
-import javax.persistence.Entity;
-import javax.persistence.ManyToMany;
-import javax.persistence.PrePersist;
-import javax.persistence.Table;
+import javax.persistence.*;
 import javax.validation.constraints.Digits;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
@@ -24,6 +21,7 @@ public class Order implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @NotNull
+    @Id
     private Long id;
     @NotBlank(message="Name is required")
     private String name;

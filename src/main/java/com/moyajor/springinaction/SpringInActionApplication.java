@@ -10,6 +10,7 @@ public class SpringInActionApplication implements WebMvcConfigurer {
 	@Override
 	public void addViewControllers(ViewControllerRegistry registry) {
 		registry.addViewController("/").setViewName("home");
+		registry.addViewController("/login");
 	}
 
 	public static void main(String[] args) {

@@ -26,6 +26,9 @@ public class Taco {
     @Size(min=1, message="You must choose at least 1 ingredient")
     private List<Ingredient> ingredients;
 
+    @ManyToOne
+    private User user;
+
     @PrePersist
     void createdAt() {
         this.createdAt = new Date();

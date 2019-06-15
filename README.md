@@ -5,6 +5,7 @@
 2. [Chapter 2: Developing web applications](#Chapter2)
 3. [Chapter 3: Working with data](#Chapter3)
 4. [Chapter 4: Securing Spring](#Chapter4)
+5. [Chapter 5: Working with configuration properties](#Chapter5)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -332,3 +333,280 @@ Finally, you can also place OrderBy at the end of the method name to sort the re
     
 
 ## Chapter 4: Securing Spring<a name="Chapter4"></a>
+
+To add spring security to your application, you need to put the following dependency into your pom.xml:
+
+```xml
+ <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+```
+
+With this dependency, when the application starts, autoconfiguration will detect that Spring Security is in the classpath 
+and will set up some basic security configuration. After adding this, you'll be prompted for user and pass if you try to 
+access the main page (user is 'user' and the pass appears in the generated log files). This is because spring security 
+adds the following features:
+
+    * All HTTP request paths require authentication
+    * No specific roles or authorities are required
+    * There’s no login page
+    * Authentication is prompted with HTTP basic authentication
+    * There’s only one user; the username is user
+
+### Configuring Spring Security
+Spring Security offers several options for configuring a user store, including these:
+
+    * An in-memory user store
+    * A JDBC-based user store
+    * An LDAP-backed user store 
+    * A custom user details service
+    
+By overriding a `configure()` method defined in the _WebSecurityConfigurerAdapter_ configuration base class, you can 
+select which one of the previous options you want to use:
+
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+@Override protected void configure(AuthenticationManagerBuilder auth) throws Exception {...}
+
+}
+```
+
+#### In memory User Store
+For example, to use the in memory user store (for small number of users not likely to change), do:
+
+```java
+@Override 
+protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+    auth.inMemoryAuthentication()
+        .withUser("buzz").password("infinity").authorities("ROLE_USER")
+        .and()
+        .withUser("woody").password("bullseye").authorities("ROLE_USER");
+}
+```
+
+#### JDBC User Store
+Similarly, to use a JDBC-based user store:
+
+```java
+@Autowired
+DataSource dataSource;
+
+@Override protected void configure(AuthenticationManagerBuilder auth)throws Exception {
+    auth.jdbcAuthentication().dataSource(dataSource); 
+}
+```
+
+This minimal configuration will make some assumptions about your database schema, the queries user to retrieve the 
+security configuration are shown below:
+
+```java
+public static final String DEF_USERS_BY_USERNAME_QUERY =
+        "select username,password,enabled from users where username = ?";
+public static final String DEF_AUTHORITIES_BY_USERNAME_QUERY =
+        "select username,authority from authorities where username = ?";
+public static final String DEF_GROUP_AUTHORITIES_BY_USERNAME_QUERY =
+        "select g.id, g.group_name, ga.authority from groups g, group_members gm, group_authorities ga " +
+        "where gm.username = ? and g.id = ga.group_id and g.id = gm.group_id";
+```
+
+But it is also possible to configure your own queries:
+
+```java
+@Override
+protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+  auth.jdbcAuthentication().dataSource(dataSource)
+    .usersByUsernameQuery("select username, password, enabled from Users where username=?")
+    .authoritiesByUsernameQuery("select username, authority from UserAuthorities where username=?")
+    .passwordEncoder(new StandardPasswordEncoder("53cr3t");;
+}
+```
+
+To avoid passwords to be stored in the DB in plain text this, spring provides multiple password encoders:
+
+    * BCryptPasswordEncoder—Applies bcrypt strong hashing encryption 
+    * NoOpPasswordEncoder—Applies no encoding
+    * Pbkdf2PasswordEncoder—Applies PBKDF2 encryption
+    * SCryptPasswordEncoder—Applies scrypt hashing encryption
+    * StandardPasswordEncoder—Applies SHA-256 hashing encryption
+
+You can also provide your own implementation of password encoder, by implementing the following interface:
+
+```java
+public interface PasswordEncoder {
+  String encode(CharSequence rawPassword);
+  boolean matches(CharSequence rawPassword, String encodedPassword);
+}
+```
+
+#### LDAP-backed User Store
+Similarly to the ones above, to use LDAP, simply do:
+
+```java
+@Override
+protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+  auth.ldapAuthentication().userSearchFilter("(uid={0})").groupSearchFilter("member={0}");
+}
+```
+By default, the base queries for both users and groups are empty, indicating that the search will be done from the root of
+ the LDAP hierarchy. But you can change that by specifying a query base:
+ 
+ ```java
+
+@Override
+protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+  auth.ldapAuthentication().userSearchBase("ou=people").userSearchFilter("(uid={0})")
+    .groupSearchBase("ou=groups").groupSearchFilter("member={0}");
+}
+```
+
+
+The default strategy for authenticating against LDAP is to perform a bind operation, authenticating the user directly to 
+the LDAP server. Another option is to perform a comparison operation. This involves sending the entered password to the 
+LDAP directory and asking the server to compare the password against a user’s password attribute. You can do password 
+comparison by adding `.passwordCompare();` to the above.
+The password given in the login form will be compared with the value of the userPassword attribute in the user’s LDAP 
+entry. If the password is kept in a different attribute, you can specify the attribute’s name with `passwordAttribute()`. 
+As with JDBC, we can define a password encoder (encoder should match that in the LDAP server).
+By default, Spring Security’s LDAP authentication assumes that the LDAP server is listening on port 33389 on localhost. To
+configure a remote server, use `.contextSource().url("ldap://yourserver:389/dc=yourapp,dc=com");`. Spring allows you to 
+define an embedded LDAP server, instead of setting the URL to a remote LDAP server, you can specify the root suffix for 
+the embed- ded server via the _root()_ method: `.contextSource().root("dc=yourapp,dc=com");`. When this LDAP server starts, 
+it will attempt to load data from any LDIF files that it can find in the classpath (or use the `ldif()` method to define 
+the lookup path).
+
+#### Customizing user authentication
+It is also possible to define your own entity to store user credentials, for example to add other details like address or 
+phone. To do that, implement the Spring's _UserDetails_ interface. With this class created, we can create the following:
+
+```java
+public interface UserDetailsService {
+  UserDetails loadUserByUsername(String username) throws UsernameNotFoundException;
+}
+``` 
+
+The loadByUsername() method has one simple rule: it must never return null. Once more, to use this security configuration,
+ you'll need to implement the `configure()` method, and pass the _UserDetailService_ to the _AuthenticationManagerBuilder_.
+ 
+```java
+@Override
+protected void configure(AuthenticationManagerBuilder auth) throws Exception { auth.userDetailsService(userDetailsService); }
+```
+
+### Securing web requests
+To configure security rules, we have other options in _WebSecurityConfigurer_ other configure() method:
+
+```java
+@Override
+protected void configure(HttpSecurity http) throws Exception {...}
+```
+
+This method accepts an HttpSecurity object, which can be used to configure how security is handled at the web level. 
+Among the many things you can configure with HttpSecurity are these:
+
+    * Requiring that certain security conditions be met before allowing a request to be served
+    * Configuring a custom login page
+    * Enabling users to log out of the application
+    * Configuring cross-site request forgery protection
+    
+#### Securing requests
+The call to authorizeRequests() returns an object (ExpressionInterceptUrlRegistry) on which you can specify URL paths and 
+patterns and the security requirements for those paths. The order of these rules is important. Security rules declared 
+first take precedence over those declared lower down. The following is a list of all methods available:
+
+| METHOD                     | WHAT IT DOES                                                      |
+|----------------------------|-------------------------------------------------------------------|
+| access(String)             | Allows access if the given SpEL expression evaluates to true      |
+| anonymous()                | Allows access to anonymous users                                  |
+| authenticated()            | Allows access to authenticated users                              |
+| denyAll()                  | Denies access unconditionally                                     |
+| fullyAuthenticated()       | Allows access if the user is fully authenticated (not remembered) |
+| hasAnyAuthority(String...) | Allows access if the user has any of the given authorities        |
+| hasAnyRole(String...)      | Allows access if the user has any of the given roles              |
+| hasAuthority(String)       | Allows access if the user has the given authority                 |
+| hasIpAddress(String)       | Allows access if the request comes from the given IP address      |
+| hasRole(String)            | Allows access if the user has the given role                      |
+| not()                      | Negates the effect of any of the other access methods             |
+| permitAll()                | Allows access unconditionally                                     |
+| rememberMe()               | Allows access for users who are authenticated via remember-me     |
+
+Similar methods to the ones above, are defined to accept SpEL expression instead of strings. With this, an expression like
+ the one below would be valid:
+
+```java
+http.authorizeRequests().antMatchers("/design", "/orders")
+    .access("hasRole('ROLE_USER') && T(java.util.Calendar).getInstance().get(T(java.util.Calendar).DAY_OF_WEEK) == T(java.util.Calendar).TUESDAY")  
+```
+
+#### Creating a custom login page
+To replace the built-in login page, you first need to tell Spring Security what path your custom login page will be at:
+
+```java
+@Override
+protected void configure(HttpSecurity http) throws Exception {
+  http
+    .authorizeRequests()
+    .antMatchers("/design", "/orders")
+    .access("hasRole('ROLE_USER')")
+    .antMatchers(“/”, "/**").access("permitAll")
+    .and()
+    .formLogin().loginPage("/login");
+}
+```
+
+The call to `loginPage()` designates the path where your custom login page will be provided. When Spring Security determines 
+that the user is unauthenticated and needs to log in, it will redirect them to this path. With this configuration, Spring 
+Security listens for login requests at _/login_ and expects that the username and password fields be named username and 
+password (although this can be configured with the `.usernameParameter("user")` and `.passwordParameter("pwd")` methods).
+If the user were to directly navigate to the login page, a successful login would take them to the root path (for example, 
+the homepage). But you can change that by specifying a default success page using the `.defaultSuccessUrl("/page")` method. 
+
+#### Logging out
+To enable logout, you simply need to call logout on the HttpSecurity object: `.and().logout().logoutSuccessUrl("/")`, 
+which is used to clear out the session. The method `.logoutSuccessUrl("/")` serves to define the redirection after logout.
+
+#### Preventing cross-site request forgery
+Cross-site request forgery (CSRF) is a common security attack. It involves subjecting a user to code on a maliciously 
+designed web page that automatically (and usually secretly) submits a form to another application on behalf of a user who 
+is often the victim of the attack. To protect against such attacks, applications can generate a CSRF token upon displaying a
+form, place that token in a hidden field, and then stow it for later use on the server. Spring Security has built-in CSRF
+protection enabled by default (can be disable with`.and().csrf().disable()`). You only need to make sure that any forms 
+your application submits include a field named _\_csrf_ that contains the CSRF token. Spring Security even makes that 
+easy by placing the CSRF token in a request attribute with the name _csrf: `<input type="hidden" name="_csrf" 
+th:value="${_csrf.token}"/>`. Thymeleaf will include this for you as long as one of the attributes of the <form> element 
+is prefixed as a Thymeleaf attribute.
+ 
+### Knowing your user
+There are several ways to determine who the user is. These are a few of the most common ways:
+
+    * Inject a Principal object into the controller method
+    * Inject an Authentication object into the controller method 
+    * Use SecurityContextHolder to get at the security context
+    * Use an @AuthenticationPrincipal annotated method
+
+An example of this can be seen below:
+
+```java
+@PostMapping
+public String processOrder(@Valid Order order, Errors errors,SessionStatus sessionStatus,Authentication authentication) {
+    ...
+      User user = (User) authentication.getPrincipal();
+      order.setUser(user);
+    ...
+}
+```
+
+Perhaps the cleanest solution of all, however, is to simply accept a User object in processOrder(), but annotate it with 
+_@AuthenticationPrincipal_ so that it will be the authentication’s principal:
+
+```java
+@PostMapping
+public String processOrder(@Valid Order order, Errors errors, SessionStatus sessionStatus,
+    @AuthenticationPrincipal User user) {...}
+```
+
+
+## Chapter 5: Working with configuration properties<a name="Chapter5"></a>
