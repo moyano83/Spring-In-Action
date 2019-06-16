@@ -6,6 +6,7 @@
 3. [Chapter 3: Working with data](#Chapter3)
 4. [Chapter 4: Securing Spring](#Chapter4)
 5. [Chapter 5: Working with configuration properties](#Chapter5)
+6. [Chapter 6: Creating REST services](#Chapter6)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -610,3 +611,140 @@ public String processOrder(@Valid Order order, Errors errors, SessionStatus sess
 
 
 ## Chapter 5: Working with configuration properties<a name="Chapter5"></a>
+
+There are two different (but related) kinds of configurations in Spring:
+
+    * Bean wiring—Configuration that declares application components to be created as beans in the Spring application 
+      context and how they should be injected into each other
+    * Property injection—Configuration that sets values on beans in the Spring application context
+    
+#### Understanding Spring’s environment abstraction
+The Spring environment abstracts the origins of properties so that beans needing those properties can consume them from 
+Spring itself. The properties can come from JVM system properties, operating system environment variables, command-line 
+arguments or application property configuration files (when setting properties as environment variables, the naming style 
+is slightly different to accommodate restrictions placed on environment variable names by the operating system).
+
+#### Configuring a data source
+Although you could explicitly configure your own DataSource bean, that’s usually unnecessary. Spring Boot can even figure 
+it out the JDBC driver class from the structure of the database URL. The DataSource bean will be pooled using Tomcat’s 
+JDBC connection pool if it’s avail- able on the classpath. If not, Spring Boot looks for and uses one of these other 
+connection pool implementations on the classpath (HikariCP and Commons DBCP 2). With spring boot, you can specify the 
+database initialization scripts to run when the application starts:
+
+```yaml
+spring:
+  datasource:
+    schema:
+    - DBCstructure.sql
+    data:
+    - data.sql
+```
+
+You can also configure your data source in JNDI and have Spring look it up from there:
+
+```yaml
+spring:
+  datasource:
+    jndi-name: java:/comp/env/jdbc/tacoCloudDS
+```
+
+#### Configuring the embedded server
+When setting the server port, if 0 is chosen, spring will randomly chosen available port (i.e. tests). If the server is 
+set to use HTTPS, after setting up a keystore, you can configure it as:
+
+```yaml
+server:
+  port: 8443
+  ssl:
+    key-store: file:///path/to/mykeys.jks
+    key-store-password: pass
+    key-password: pass
+```
+
+#### Configuring logging
+By default, Spring Boot configures logging via Logback to write to the console at an INFO level. For full control over the
+ logging configuration, you can create a logback.xml file at the root of the classpath. To set the logging levels, you 
+ create properties that are prefixed with logging.level, followed by the name of the logger. The logging.path and logging
+ .file properties can help to set to which file to write the logs (By default, the log files rotate once they reach 10 MB 
+ in size).
+ 
+#### Using special property values
+When setting properties, you aren’t limited to declaring their values as hard-coded String and numeric values. Instead, 
+you can derive their values from other configuration properties. To achieve this, you could use the ${} placeholder markers.
+
+### Creating your own configuration properties
+To support property injection of configuration properties, Spring Boot provides the @ConfigurationProperties annotation. 
+When placed on any Spring bean, it specifies that the properties of that bean can be injected from properties in the Spring
+ environment. _Pageable_ is Spring Data’s way of selecting some subset of the results by a page number and page size.
+The _@ConfigurationProperties_ annotation has an attribute _prefix_ that can be used to define the prefix that would be 
+added to the attribute of the class that is marked with it, in order to resolve the property name to take the value from. 
+i.e. if there is a property in a class named size, and the _@ConfigurationProperties(prefix="com.test")_, the property 
+name would be resolved as "com.test.size".
+
+#### Defining configuration properties holders
+_@ConfigurationProperties_ are in fact often placed on beans whose sole purpose in the application is to be holders of 
+configuration data. In this way, if you need to add, remove, rename, or otherwise change the prop- erties therein, you 
+only need to apply those changes in one class.
+
+#### Declaring configuration property metadata
+Configuration property metadata is completely optional and doesn’t prevent configuration properties from working. But the 
+metadata can be useful for providing some minimal documentation around the configuration properties, especially in the IDE.
+To create metadata for your custom configuration properties, you’ll need to create a file under the META-INF (for example,
+ in the project under src/main/resources/ META-INF) named additional-spring-configuration-metadata.json. i.e.:
+ 
+```json
+{
+  "properties": [
+    {
+      "name": "taco.orders.page-size",
+      "type": "java.lang.String",
+      "description": "Sets the maximum number of orders to display in a list"
+  } ]
+}
+```
+
+### Configuring with profiles
+When applications are deployed to different run-time environments, usually some configuration details differ. One way to 
+configure properties uniquely in one environment over another is to use environment variables to specify configuration 
+properties instead of defining them in _application.properties_ and _application.yml_. Profiles are a type of conditional 
+configuration where different beans, configuration classes, and configuration properties are applied or ignored based on 
+what profiles are active at runtime.
+
+#### Defining profile-specific properties
+One way to define profile-specific properties is to create yet another YAML or properties file containing only the 
+properties for production. The name of the file should follow this convention: _application-{profile name}.yml_ or 
+_application-{profile name}.properties_.
+Another way to specify profile-specific properties works only with YAML configuration. It involves placing profile-specific 
+properties alongside non-profiled properties in _application.yml_, separated by three hyphens and the _spring.profiles_ 
+property to name the profile:
+
+```yaml
+logging:
+  level:
+    app: DEBUG # Applies to all profiles (default profile)
+--- 
+spring:
+  profiles: prod # Profile specific config
+  datasource:
+    url: jdbc:mysql://localhost/tacocloud
+    username: tacouser
+    password: tacopassword
+...    
+```
+
+### Activating profiles
+To make a profile active, include it in the list of profile names given to the _spring.profiles.active_ property. The profile
+ active and the corresponding configuration properties would take precedence over the properties in the default profile.
+ 
+#### Conditionally creating beans with profiles
+Sometimes it’s useful to provide a unique set of beans for different profiles, the _@Profile_ annotation can designate 
+beans as only being applicable to a given profile. It’s also possible to use _@Profile_ on an entire _@Configuration_ 
+annotated class. i.e.
+
+```java
+@Configuration
+@Profile({"dev", "qa", "!prod"}) // Multiple profiles can be passed, ! negates the profile
+public class DevelopmentConfig {...}
+```
+
+## Chapter 6: Creating REST services<a name="Chapter6"></a>
