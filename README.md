@@ -7,6 +7,7 @@
 4. [Chapter 4: Securing Spring](#Chapter4)
 5. [Chapter 5: Working with configuration properties](#Chapter5)
 6. [Chapter 6: Creating REST services](#Chapter6)
+7. [Chapter 7: Consuming REST services](#Chapter7)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -748,3 +749,165 @@ public class DevelopmentConfig {...}
 ```
 
 ## Chapter 6: Creating REST services<a name="Chapter6"></a>
+
+### Retrieving data from the server
+The _@RestController_ annotation serves two purposes. First, it’s a stereotype annotation like _@Controller_ and _@Service_ 
+that marks a class for discovery by component scanning. Also, it tells Spring that all handler methods in the controller 
+ should have their return value written directly to the body of the response, rather than being carried in the model to a 
+ view for rendering.
+You could also annotate the  _@Controller_, just like with any Spring MVC controller. But then you’d need to also annotate
+ all of the handler methods with _@ResponseBody_ to achieve the same result (or return a _ResponseEntity_ object). 
+If the handler methods in your controller has a producer attribute, it will only handle requests if the request’s Accept 
+header includes the same accepts content type (i.e. "application/json"). This allows other controllers to handle requests 
+with the same paths, so long as those requests don’t require the same content type output (you can also produce several 
+type of contents in the same controller).
+With Angular, the portion of the application will be running on a separate host and/or port from the API (at least for 
+now), the web browser will prevent your Angular client from consuming the API. This restriction can be overcome by 
+including CORS (Cross-Origin Resource Sharing) headers in the server responses (or the @CrossOrigin annotation).
+You can leverage the REST syntaxis to pass variables as path parameters by annotating the methods like this:
+```@GetMapping("/example/{id}") public Model getById(@PathVariable("id") Long id) {...}``` The controller's base path and 
+the method paths are additive.
+
+### Sending data to the server
+An example of how to define a method in a controller to accept content instead of producing it, is below:
+
+```java
+@PostMapping(path ="/somePath", consumes="application/json")
+@ResponseStatus(HttpStatus.CREATED) //Replies with 201 code on completion
+public Model postModel(@RequestBody Model model) { //The json message is converted to the Model object
+  return modelRepo.save(model);
+}
+```
+
+Without the _@RequestBody_ annotation, Spring assume that you want request parameters (either query parameters or form 
+parameters).
+
+### Updating data on the server
+GET is the verb used to fetch data from server, PUT is really intended to perform a wholesale replacement operation rather 
+than an update operation. In contrast, the purpose of HTTP PATCH is to perform a patch or partial update of resource data 
+(_@PatchMapping_ is available in Spring).
+
+### Deleting data from the server
+Spring MVC’s _@DeleteMapping_ comes in handy for declaring methods that handle DELETE requests.
+
+## Enabling hypermedia
+Hypermedia as the Engine of Application State, or HATEOAS, is a means of creating self-describing APIs wherein resources 
+returned from an API contain links to related resources. An example of the response of such API is shown:
+
+
+```json
+    {
+      "_embedded": {
+        "tacoResourceList": [
+          {
+            "name": "Veg-Out",
+            "createdAt": "2018-01-31T20:15:53.219+0000",
+            "ingredients": [
+              {
+                "name": "Flour Tortilla", "type": "WRAP",
+                "_links": {
+                  "self": { "href": "http://localhost:8080/ingredients/FLTO" }
+                }
+              }]
+          }],
+      "_links": {
+        "recents": {
+          "href": "http://localhost:8080/design/recent"
+      }
+    }
+  }   
+}
+```
+Each element in this in this example includes a property named _links that contains hyperlinks for the client to navigate 
+the API. The Spring HATEOAS project brings hyperlink support to Spring. It offers a set of classes and resource assemblers
+ that can be used to add links to resources before returning them from a Spring MVC controller. We can add support for 
+ HATEOAS with the following dependency:
+ 
+```xml
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-hateoas</artifactId>
+</dependency>
+ ```
+ 
+### Adding hyperlinks
+Spring HATEOAS provides two primary types that represent hyperlinked resources: Resource and Resources. The Resource type 
+represents a single resource, whereas Resources is a collection of resources. The most useful of the Spring HATEOAS link 
+builders is ControllerLinkBuilder. This link builder is smart enough to know what the hostname is without you having to 
+hardcode it. And it provides a handy fluent API to help you build links relative to the base URL of any controller.
+
+### Creating resource assemblers
+Adding links to embedded lists of resources can be tedious, therefore Spring provides resource assemblers. Rather than let
+ Resources.wrap() create a Resource object for each taco in the list, you’re going to define a utility class that converts
+Model objects to a new ModelResource object. This new Resource should extends _ResourceSupport_ to inherit a list of Link 
+object and methods to manage the list of links. In addition to this, you need to create a ResouceAssembler.
+The ResourceAssembler has a default constructor that informs the superclass (ResourceAssemblerSupport) that it will be 
+using the passed controller class to determine the base path for any URLs in links it creates when creating a new Resource.
+
+### Naming embedded relationships
+If you were to refactor the name of the Resource class to something else, the field name in the resulting JSON would 
+change to match it. The _@Relation_ annotation can help break the coupling between the JSON field name and the resource type
+ class names as defined in Java:
+ `@Relation(value="taco", collectionRelation="tacos") public class TacoResource extends ResourceSupport {...}`
+ 
+## Enabling data-backed services
+Spring Data REST is another member of the Spring Data family that automatically creates REST APIs for repositories created
+ by Spring Data. Add it with:
+ 
+ ```xml
+ <dependency>
+   <groupId>org.springframework.boot</groupId>
+   <artifactId>spring-boot-starter-data-rest</artifactId>
+ </dependency>
+ ```
+ By simply having the Spring Data REST starter in the build, the application gets auto-configuration that enables 
+ automatic creation of a REST API for any repositories that were created by Spring Data (including Spring Data JPA, Spring
+  Data Mongo and others).
+One thing you might want to do is set a base path for the API so that its endpoints are distinct and don’t collide with 
+ any controllers you write. For that, you need to define the _spring.data.rest.base-path_ property, which sets the base path
+ for Spring Data REST endpoints. 
+ 
+### Adjusting resource paths and relation names
+When creating endpoints for Spring Data repositories, Spring Data REST tries to pluralize the associated entity class (for
+ the _Model_ entity, the endpoint is _Models_). Spring Data REST also exposes a home resource (at the url defined by the 
+ spring.data.rest.base-path property) that has links for all exposed endpoints so you can find the generated urls for your
+ resources. By adding a simple annotation to your model class, you can tweak both the relation name and that path for the
+ resource: 
+ 
+```java
+@Data
+@Entity
+@RestResource(rel="tacos", path="tacos")
+public class Taco {...}
+```
+
+### Paging and sorting
+By default, requests to a collection resource such as /api/tacos will return up to 20 items per page from the first page, 
+although it can be adjusted by specifying the _page_ (0-based) and _size_ parameters in your request.
+The _sort_ parameter lets you sort the resulting list by any property of the entity.
+
+### Adding custom endpoints
+When you write your own API controllers, their endpoints seem somewhat detached from the Spring Data REST endpoints in a 
+couple of ways:
+
+    * Your own controller endpoints aren’t mapped under Spring Data REST’s base path. You could force their mappings to be 
+    prefixed with whatever base path you want, including the Spring Data REST base path, but if the base path were to 
+    change, you’d need to edit the controller’s mappings to match.
+    * Any endpoints you define in your own controllers won’t be automatically included as hyperlinks in the resources 
+    returned by Spring Data REST end- points. This means that clients won’t be able to discover your custom endpoints with
+    a relation name.
+    
+Spring Data REST includes _@RepositoryRestController_, a new annotation for annotating controller classes whose mappings 
+should assume a base path that’s the same as the one configured for Spring Data REST endpoints. All mappings in a 
+controller annotatde with this would be prefixed with the value of the _spring.data.rest.base-path_ property.
+One important thing to notice is that although _@RepositoryRestController_ is named similarly to _@RestController_, it 
+doesn’t carry the same semantics as _@RestController_. Specifically, it doesn’t ensure that values returned from handler 
+methods are automatically written to the body of the response. Therefore you need to either annotate the method with 
+ _@ResponseBody_ or return a ResponseEntity that wraps the response data. Here you chose to return a ResponseEntity.
+ 
+### Adding custom hyperlinks to Spring Data endpoints
+By declaring a resource processor bean, you can add links to the list of links that Spring Data REST automatically includes.
+Spring offers _ResourceProcessor_, an interface for manipulating resources before they’re returned through the API. 
+
+
+## Chapter 7: Consuming REST services<a name="Chapter7"></a>
