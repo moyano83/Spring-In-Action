@@ -8,6 +8,7 @@
 5. [Chapter 5: Working with configuration properties](#Chapter5)
 6. [Chapter 6: Creating REST services](#Chapter6)
 7. [Chapter 7: Consuming REST services](#Chapter7)
+8. [Chapter 8: Sending messages asynchronously](#Chapter8)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -911,3 +912,126 @@ Spring offers _ResourceProcessor_, an interface for manipulating resources befor
 
 
 ## Chapter 7: Consuming REST services<a name="Chapter7"></a>
+
+A Spring application can consume a REST API with:
+
+    * RestTemplate — A straightforward, synchronous REST client provided by the core Spring Framework
+    * Traverson — A hyperlink-aware, synchronous REST client provided by Spring HATEOAS
+    * WebClient — A reactive, asynchronous REST client
+
+### Consuming REST endpoints with RestTemplate
+RestTemplate provides 41 methods for interacting with REST resources. The most important of them are:
+
+| Method        | Description                                                                                              |
+|---------------|----------------------------------------------------------------------------------------------------------|
+| delete(...)   |Performs an HTTP DELETE request on a resource at a specified URL                                          |
+| exchange(...) | Executes a specified HTTP method against a URL, returning a ResponseEntity containing an object mapped from the response body |
+| execute(...)  | Executes a specified HTTP method against a URL, returning an object mapped from the response body        |
+| getForEntity(...) | Sends an HTTP GET request, returning a ResponseEntity containing an object mapped from the response body |
+| getForObject(...) | Sends an HTTP GET request, returning an object mapped from a response body                           |
+| headForHeaders(...) | Sends an HTTP HEAD request, returning the HTTP headers for the speci- fied resource URL |
+| optionsForAllow(...) | Sends an HTTP OPTIONS request, returning the Allow header for the specified URL |
+| patchForObject(...) | Sends an HTTP PATCH request, returning the resulting object mapped from the response body |
+| postForEntity(...) | POSTs data to a URL, returning a ResponseEntity containing an object mapped from the response body |
+| postForLocation(...) | POSTs data to a URL, returning the URL of the newly created resource |
+| postForObject(...) | POSTs data to a URL, returning an object mapped from the response body |
+| put(...) | PUTs resource data to the specified URL |
+
+With the exception of TRACE, RestTemplate has at least one method for each of the standard HTTP methods. In addition, 
+execute() and exchange() provide lower-level, general-purpose methods for sending requests with any HTTP method.
+Most of the methods in table 7.1 are overloaded into three method forms:
+
+    * One accepts a String URL specification with URL parameters specified in a variable argument list
+    * One accepts a String URL specification with URL parameters specified in a Map<String,String>
+    * One accepts a java.net.URI as the URL specification, with no support for parameterized URLs
+
+To use RestTemplate, you’ll either need to create an instance at the point you need it
+
+`RestTemplate rest = new RestTemplate();`
+
+or you can declare it as a bean and inject it where you need it:
+
+`@Bean public RestTemplate restTemplate() { return new RestTemplate();}`
+
+#### GETting resources
+The following code uses RestTemplate to fetch an Ingredient object by its ID (you can also use a Map to specify the URL 
+variables):
+
+```java
+public Ingredient getIngredientById(String ingredientId) {
+  return rest.getForObject("http://localhost:8080/ingredients/{id}", Ingredient.class, ingredientId);
+}
+```
+
+It’s important to know that the variable param- eters are assigned to the placeholders in the order that they’re given.
+_getForEntity()_ works in much the same way as _getForObject()_, but instead of returning a domain object that represents the
+ response’s payload, it returns a Response- Entity object that wraps that domain object.
+
+#### PUTting resources
+All three overloaded variants of put() accept an Object that is to be serialized and sent to the given URL. As for the URL
+ itself, it can be specified as a URI object or as a String:
+ 
+```java
+public void updateIngredient(Ingredient ingredient) {
+          rest.put("http://localhost:8080/ingredients/{id}", ingredient, ingredient.getId());
+}
+```
+
+#### DELETEing resources
+As with the other RestTemplate methods, the URL to delete a resource could be specified as a URI object or the URL 
+parameters given as a Map:
+
+```java
+public void deleteIngredient(Ingredient ingredient) {
+  rest.delete("http://localhost:8080/ingredients/{id}", ingredient.getId());
+}
+```
+
+#### POSTing resource data
+RestTemplate has three ways of sending a POST request, each of which has the same overloaded variants for specifying the URL.
+
+```java
+public Ingredient createIngredient(Ingredient ingredient) {
+  return rest.postForObject("http://localhost:8080/ingredients", ingredient, Ingredient.class);
+}
+```
+
+If your client has more need for the location of the newly created resource, then you can call _postForLocation()_ instead:
+
+```java
+public URI createIngredient(Ingredient ingredient) {
+  return rest.postForLocation("http://localhost:8080/ingredients", ingredient);
+}
+```
+
+The URI returned is derived from the response’s Location header. In the off chance that you need both the location and 
+response payload, you can call _postForEntity()_ with the same parameters than before. If the API you’re consuming 
+includes hyperlinks in its response, RestTemplate isn’t very helpful.
+
+### Navigating REST APIs with Traverson
+Traverson comes with Spring Data HATEOAS as the out-of-the-box solution for consuming hypermedia APIs in Spring applications.
+Working with Traverson starts with instantiating a Traverson object with an API’s base URI:
+`Traverson traverson = new Traverson(URI.create("http://localhost:8080/api"), MediaTypes.HAL_JSON);`
+
+You need to point Traverson to the base URL and from here on out, you’ll navigate the API by link relation names:
+
+```java
+ParameterizedTypeReference<Resources<Ingredient>> ingredientType =new ParameterizedTypeReference<Resources<Ingredient>>(){};
+Resources<Ingredient> ingredientRes = traverson.follow("ingredients").toObject(ingredientType);
+Collection<Ingredient> ingredients = ingredientRes.getContent();
+```
+By calling the follow() method on the Traverson object, you can navigate to the resource whose link’s relation name is 
+ingredients. The toObject() method requires that you tell it what kind of object to read the data into. The 
+_ParameterizedTypeReference_ helps to deal with java type erasure. Traverson makes it easy to navigate HATEOAS-style 
+website, but doesn’t offer any methods for writing to or deleting from those APIs, but _RestTemplate_ does so you can 
+combine them:
+
+```java
+private Ingredient addIngredient(Ingredient ingredient) {
+  String ingredientsUrl = traverson.follow("ingredients").asLink().getHref();
+  return rest.postForObject(ingredientsUrl,ingredient,Ingredient.class);
+}
+``` 
+
+
+## Chapter 8: Sending messages asynchronously<a name="Chapter8"></a>
