@@ -1035,3 +1035,205 @@ private Ingredient addIngredient(Ingredient ingredient) {
 
 
 ## Chapter 8: Sending messages asynchronously<a name="Chapter8"></a>
+
+Asynchronous messaging is a way of indirectly sending messages from one application to another without waiting for a 
+response. 
+
+### Sending messages with JMS
+JMS is a Java standard that defines a common API for working with message brokers. Spring supports JMS through a 
+template-based abstraction known as JmsTemplate.
+
+#### Setting up JMS
+There are several spring starters for JMS depending on the provider (RabitMQ, ActiveMQ...):
+
+```xml
+<!-- Active MQ-->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-activemq</artifactId>
+</dependency>
+<!-- Artemis MQ -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-artemis</artifactId>
+</dependency>
+```
+
+Artemis (nex generation of ActiveMQ), uses by default localhost and port 61616. To set it for other environments, the 
+following properties should be set:
+
+    * spring.artemis.host: The broker’s host
+    * spring.artemis.port: The broker’s port
+    * spring.artemis.user: The user to use to access the broker (optional)
+    * spring.artemis.password: The password to use to access the broker (optional)
+
+The same properties for ActiveMQ:
+
+    * spring.activemq.broker-url: The URL of the broker
+    * spring.activemq.user: The user to use to access the broker (optional)
+    * spring.activemq.password: The password to use to access the broker (optional)
+    * spring.activemq.in-memory: Whether or not to start an in-memory broker (default: true)
+
+If you’re using ActiveMQ, you will, however, need to set the `spring.activemq.in-memory` property to false to prevent 
+Spring from starting an in-memory broker.
+
+#### Sending messages with JmsTemplate
+JmsTemplate has several methods that are useful for sending messages, and eliminates a lot of boilerplate code that would 
+otherwise be required to work with JMS.
+JmsTemplate really has only two methods, `send()` and `convertAndSend()`, each overridden to support different parameters. 
+And if you look closer, you’ll notice that the various forms of `convertAndSend()` can be broken into two subcategories:
+
+    * Three send() methods require a MessageCreator to manufacture a Message object
+    * Three convertAndSend() methods accept an Object and automatically convert that Object into a Message behind the scenes
+    * Three convertAndSend() methods automatically convert an Object to a Message, but also accept a MessagePostProcessor
+      to allow for customization of the Message before it’s sent
+
+Each of these three method categories is composed of three overriding methods that are distinguished by how the JMS 
+destination (queue or topic) is specified:
+
+    * One method accepts no destination parameter and sends the message to a default destination
+    * One method accepts a Destination object that specifies the destination for the message
+    * One method accepts a String that specifies the destination for the message by name
+
+An example of how to send a message is given below:
+
+```java
+@Override
+public void sendOrder(Order order) {
+  jms.send(session -> session.createObjectMessage(order)); //Functional interface implementing MessageCreator
+}
+```
+
+In order for this to work, you must specify a default destination name with the `spring.jms.template.default-destination` 
+property. Using a default destination is the easiest choice, but if you ever need to send a message to a destination other 
+than the default destination, you’ll need to specify that destination as a parameter to `send()`. Example of how to create
+ a destination:
+ 
+```java
+@Bean
+public Destination orderQueue() {
+  return new ActiveMQQueue("tacocloud.order.queue");
+}
+```
+
+And use it as a parameter to the send method:
+
+```java
+@Override
+public void sendOrder(Order order) {
+  jms.send(orderQueue, session -> session.createObjectMessage(order));
+}
+```
+
+If you don't need to configure more parameters in the destination, you can use a simple string with the name of the 
+destination instead of the Destination object.
+
+##### Converting Messages Before Sending
+JmsTemplates’s convertAndSend() method simplifies message publication by eliminating the need to provide a `MessageCreator`.
+Instead, you pass the object that’s to be sent directly to `convertAndSend()`, and the object will be converted into a 
+`Message` before being sent. Just like the `send()` method, `convertAndSend()` will accept either a `Destination` or string 
+value to specify the destination.
+
+##### Configuring a Message Converter
+MessageConverter is a Spring-defined interface that has only two methods to be implemented:
+
+```java
+public interface MessageConverter {
+  Message toMessage(Object object, Session session) throws JMSException, MessageConversionException;
+  Object fromMessage(Message message);
+}
+```
+
+Spring already offers a handful of implementations for it:
+
+    * MappingJackson2MessageConverter: Uses the Jackson 2 JSON library to convert messages to and from JSON
+    * MarshallingMessageConverter: Uses JAXB to convert messages to and from XML
+    * MessagingMessageConverter: Converts a Message from the messaging abstraction to and from a Message using an underlying 
+      Message-Converter for the payload and a JmsHeaderMapper to map the JMS headers to and from standard message headers
+    * SimpleMessageConverter: Converts Strings to and from TextMessage, byte arrays to and from BytesMessage, Maps to and 
+      from MapMessage, and Serializable objects to and from ObjectMessage
+
+SimpleMessageConverter is the default, but it requires that the object being sent implement Serializable. To apply a 
+different message converter, you must declare an instance of the chosen converter as a bean in the context.
+
+##### Post-processing Messages
+Custom headers can be added to the messages to carry extra information. If you were using the `send()` method, this could 
+easily be accomplished by calling `setStringProperty()` on the Message object:
+
+```java
+jms.send("tacocloud.order.queue", session -> {
+        Message message = session.createObjectMessage(order);
+        message.setStringProperty("X_ORDER_SOURCE", "WEB");
+});
+```
+
+This can also be achieved by passing in a `MessagePostProcessor` as the final parameter to `convertAndSend()`, you can do 
+whatever you want with the Message after it has been created:
+
+```java
+jms.convertAndSend("tacocloud.order.queue", order, new MessagePostProcessor() { 
+    @Override
+    public Message postProcessMessage(Message message) throws JMSException {
+        message.setStringProperty("X_ORDER_SOURCE", "WEB");
+        return message; 
+    }
+});
+```
+
+Or even clearer with a functional interface:
+
+```java
+jms.convertAndSend("tacocloud.order.queue", order, message -> {
+      message.setStringProperty("X_ORDER_SOURCE", "WEB");
+      return message;
+});
+```
+
+#### Receiving JMS messages
+When it comes to consuming messages, you have the choice of a pull model, where your code requests a message and waits 
+until one arrives, or a push model, in which messages are handed to your code as they become available. JmsTemplate offers 
+several methods for receiving messages, but all of them use a pull model. You call one of those methods to request a message,
+and the thread blocks until a message is available. You also have the option of using a push model, wherein you define a 
+message listener. 
+
+##### Receiving with JMSTemplate
+`JmsTemplate` offers several methods for pulling methods which mirrors the `send()` and `convertAndSend()` methods seen 
+before. The `receive()` methods receive a raw Message, whereas the `receiveAndConvert()` methods use a configured message 
+converter to convert messages into domain types. And for each of these, you can specify either a Destination or a String 
+containing the destination name, or you can pull a message from the default destination. For example:
+
+```java
+private JmsTemplate jms;
+private MessageConverter converter;
+
+public Order receiveOrder() {
+    Message message = jms.receive("tacocloud.order.queue");
+    return (Order) converter.fromMessage(message);
+}
+```
+
+The `receiveAndConvert()` converts the payload of a `Message` to a domain type, making the above operation simpler:
+
+```java
+public Order receiveOrder() {
+    return (Order) jms.receiveAndConvert("tacocloud.order.queue"); //there is no need for a converter anymore
+}
+```
+
+##### Declaring Message Listeners
+A message listener is a passive component that’s idle until a message arrives. To create a message listener that reacts to 
+JMS messages, you simply must annotate a method in a component with `@JmsListener`:
+
+```java
+@JmsListener(destination = "tacocloud.order.queue")
+public void receiveOrder(Order order) {
+    // Do something with the order
+}
+```
+
+The `@JmsListener` annotation is like one of Spring MVC’s request mapping annotations, like `@GetMapping` or `@PostMapping`.
+Message listeners are often touted as the best choice because they don’t block and are able to handle multiple messages 
+quickly, but when the message handlers need to be able to ask for more messages on their own timing, the pull model 
+offered by `JmsTemplate` seems more fitting.
+
+### Working with RabbitMQ and AMQP
