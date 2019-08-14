@@ -1237,3 +1237,147 @@ quickly, but when the message handlers need to be able to ask for more messages 
 offered by `JmsTemplate` seems more fitting.
 
 ### Working with RabbitMQ and AMQP
+Whereas JMS messages are addressed with the name of a destination from which the receiver will retrieve them, AMQP mes- 
+sages are addressed with the name of an exchange and a routing key, which are decoupled from the queue that the receiver 
+is listening to. When a message arrives at the RabbitMQ broker, it goes to the exchange for which it was addressed. The 
+exchange is responsible for routing it to one or more queues. Several type of exchanges exists:
+
+    * Default: A special exchange that’s automatically created by the broker. It routes messages to queues whose name is the 
+      same as the message’s routing key. All queues will automatically be bound to the default exchange
+    * Direct: Routes messages to a queue whose binding key is the same as the message’s routing key
+    * Topic: Routes a message to one or more queues where the binding key (which may contain wildcards) matches the 
+      message’s routing key
+    * Fanout: Routes messages to all bound queues without regard for binding keys or routing keys
+    * Headers: Similar to a topic exchange, except that routing is based on message header values rather than routing keys
+    * Dead letter: A catch-all for any messages that are undeliverable (meaning they don’t match any defined 
+      exchange-to-queue binding)
+      
+#### Adding RabbitMQ to Spring
+Spring has a starter dependency for ActiveMQ:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-amqp</artifactId>
+</dependency>
+```
+
+Adding this to your project will create a AMQP connection factory and RabbitTemplate beans, as well as other supporting 
+components. Some important configurations:
+
+    * spring.rabbitmq.addresses: A comma-separated list of RabbitMQ broker addresses
+    * spring.rabbitmq.host: The broker’s host (defaults to localhost)
+    * spring.rabbitmq.port: The broker’s port (defaults to 5672)
+    * spring.rabbitmq.username: The username to use to access the broker (optional)
+    * spring.rabbitmq.password: The password to use to access the broker (optional)
+ 
+#### Sending messages with RabbitTemplate
+At the core of Spring’s support for RabbitMQ messaging is `RabbitTemplate`. With regard to sending messages with 
+RabbitTemplate, the `send()` and `convertAndSend()` methods parallel the same-named methods from `JmsTemplate`, although 
+`RabbitTemplate` methods send messages in terms of exchanges and routing keys. Below is an example of how to send a message:
+
+
+```java
+public void sendOrder(Order order) {
+    MessageConverter converter = rabbit.getMessageConverter();
+    MessageProperties props = new MessageProperties();
+    Message message = converter.toMessage(order, props);
+    rabbit.send("routing.key.value", message); //supplied the routing key, the default exchange will be used
+}
+public void sendOrderWithConvertAndSend(Order order) {
+    rabbit.convertAndSend("tacocloud.order", order);
+}
+```
+
+The default exchange name and default routing key is an empty String, which corresponds to the default exchange that’s 
+automatically created by the RabbitMQ broker (but they both can be set with `spring.rabbitmq.template.exchange` and 
+`spring.rabbitmq.template.routing-key` properties).
+
+##### Configuring a Message Converter
+By default, message conversion is performed with `SimpleMessageConverter`, which is able to convert simple types (like 
+String) and Serializable objects to Message objects. Other convertersare: 
+
+    * Jackson2JsonMessageConverter: Converts objects to and from JSON using the Jackson 2 JSON processor
+    * MarshallingMessageConverter: Converts using a Spring Marshaller and Unmarshaller
+    * SerializerMessageConverter: Converts String and native objects of any kind using Spring’s serde abstractions
+    * SimpleMessageConverter: Converts String, byte arrays, and Serializable types
+    * ContentTypeDelegatingMessageConverter: Delegates to another Message-Converter based on the contentType header
+    * MessagingMessageConverter: Delegates to an underlying MessageConverter for the message conversion and to an  
+      AmqpHeaderConverter for the headers
+
+##### Setting Message Properties
+When creating your own Message objects, you can set the header through the MessageProperties instance you give to the 
+message converter:
+
+```java
+public void sendOrder(Order order) {
+  MessageConverter converter = rabbit.getMessageConverter();
+  MessageProperties props = new MessageProperties();
+  props.setHeader("X_ORDER_SOURCE", "WEB");
+  Message message = converter.toMessage(order, props);
+  rabbit.send("tacocloud.order", message);
+}
+```
+
+With convertAndSend(), you don’t have quick access to the Message-Properties object. A MessagePostProcessor can be used:
+
+```java
+@Override
+public void sendOrder(Order order) {
+  rabbit.convertAndSend("tacocloud.order.queue", order, new MessagePostProcessor() {
+        @Override
+        public Message postProcessMessage(Message message) throws AmqpException {
+            MessageProperties props = message.getMessageProperties();
+            props.setHeader("X_ORDER_SOURCE", "WEB");
+            return message;
+        }
+    });
+}
+```
+
+#### Receiving message from RabbitMQ
+RabbitMQ queue isn’t very different than from JMS. As with JMS, you have two choices: 
+
+    * Pulling messages from a queue with RabbitTemplate
+    * Having messages pushed to a @RabbitListener-annotated method
+
+##### Receiving Messages with Rabbittemplate
+RabbitTemplate comes with several methods for pulling messages from a queue which are the mirror images of the `send()` and 
+`convertAndSend()` methods described earlier. 
+
+```java
+public Order receiveOrder() {
+    //No routing or exchange key. 30000 is an optional timeout in milliseconds
+    Message message = rabbit.receive("tacocloud.orders", 30000); 
+    return message != null ? (Order) converter.fromMessage(message): null;
+}
+public Order receiveOrder() {
+  return (Order) rabbit.receiveAndConvert("tacocloud.order.queue");
+}
+```
+
+The above timeout can be set via configuration with the `spring.rabbitmq.template.receive-timeout` property. In the above 
+receiveAndConvert example, the casting to Order can be replaced with a `ParameterizedTypeReference`: 
+
+```java
+public Order receiveOrder() {
+  return rabbit.receiveAndConvert("tacocloud.order.queue",new ParameterizedTypeReference<Order>() {});
+}
+```
+
+##### Handling Rabbitmq messages With Listeners
+Spring offers RabbitListener, the RabbitMQ counterpart to JmsListener. To specify that a method should be invoked when a 
+message arrives in a RabbitMQ queue, annotate a bean’s method with `@RabbitTemplate`:
+
+```java
+
+@Component
+public class OrderListener {
+  @RabbitListener(queues = "tacocloud.order.queue")
+  public void receiveOrder(Order order) {
+    ui.displayOrder(order);
+  }
+}
+```
+
+### Messaging with Kafka
