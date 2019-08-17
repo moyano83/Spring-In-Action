@@ -9,6 +9,7 @@
 6. [Chapter 6: Creating REST services](#Chapter6)
 7. [Chapter 7: Consuming REST services](#Chapter7)
 8. [Chapter 8: Sending messages asynchronously](#Chapter8)
+9. [Chapter 9: Integrating Spring](#Chapter9)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -1381,3 +1382,78 @@ public class OrderListener {
 ```
 
 ### Messaging with Kafka
+Kafka topics are replicated across all brokers in the cluster. Each node in the cluster acts as a leader for one or more
+ topics, being responsible for that topic’s data and replicating it to the other nodes in the cluster.
+Each topic can be split into multiple partitions. In that case, each node in the cluster is the leader for one or more 
+partitions of a topic, but not for the entire topic.
+
+#### Setting up Spring for Kafka messaging
+There is a Spring starter for Kafka:
+
+```xml
+<dependency>
+    <groupId>org.springframework.kafka</groupId>
+    <artifactId>spring-kafka</artifactId>
+</dependency>
+```
+
+Its presence will trigger Spring Boot autoconfiguration for Kafka that will arrange a `KafkaTemplate` in the Spring 
+application context. Take in consideration the following property to set the bootstrap server for kafka(as kafka defaults
+ to localhost:9092): `spring.kafka.bootstrap-servers=kafka.tacocloud.com:9092`.
+ 
+#### Sending messages with KafkaTemplate
+In many ways, KafkaTemplate is similar to its JMS and RabbitMQ counterparts, although KafkaTemplate is typed with generics
+ and is able to deal with domain types directly when sending messages. When sending messages in Kafka, you can specify the 
+following parameters to guide how the message is sent:
+
+    * The topic to send the message to (required for send())
+    * A partition to write the topic to (optional)
+    * A key to send on the record (optional)
+    * A timestamp (optional; defaults to System.currentTimeMillis()) 
+    * The payload (required) 
+
+For the `send()` method, you can also choose to send a `ProducerRecord`, which is little more than a type that captures all 
+of the preceding parameters in a single object. You can also send a `Message` object, but doing so would require you to 
+convert your domain objects into a `Message`:
+
+```java
+public void sendOrder(Order order) {    
+    kafkaTemplate.send("some.topic", order);
+}
+```
+
+If you set a default topic, you can simplify the sendOrder() method. Set the `spring.kafka.template.default-topic` property 
+and use the `sendDefault()` method instead.
+
+#### Writing Kafka listeners
+`KafkaTemplate` differs from `JmsTemplate` and `RabbitTemplate` in that it doesn’t offer any methods for receiving messages, 
+therefore the only way to read messages is to write a `MessageListener`.
+
+```java
+@KafkaListener(topics="orders.topic")
+public void handle(Order order) {
+    orderRepository.save(order);
+}
+```
+
+If you need additional metadata from the message, it can also accept a ConsumerRecord or Message object:
+
+```java
+@KafkaListener(topics="orders.topic")
+public void handle(ConsumerRecord<Order> record) {
+  log.info("Received from partition {} with timestamp {}", record.partition(), record.timestamp());
+  orderRepository.save(record.value());
+}
+
+@KafkaListener(topics="priority.orders.topic")
+public void handleMessage(Message<Order> message) {
+MessageHeaders headers = message.getHeaders();
+  log.info("Received a priority order from partition {} with timestamp {}",
+    headers.get(KafkaHeaders.RECEIVED_PARTITION_ID)
+    headers.get(KafkaHeaders.RECEIVED_TIMESTAMP));
+  orderRepository.save(message.payload());
+}
+```
+
+
+## Chapter 9: Integrating Spring<a name="Chapter9"></a>
