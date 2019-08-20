@@ -1457,3 +1457,418 @@ MessageHeaders headers = message.getHeaders();
 
 
 ## Chapter 9: Integrating Spring<a name="Chapter9"></a>
+
+### Declaring a simple integration flow
+Spring Integration enables the creation of integration flows through which an application can receive or send data to some
+ resource external to the application itself (like the filesystem). The starter dependencies are:
+ 
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-integration</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.integration</groupId>
+    <artifactId>spring-integration-file</artifactId>
+</dependency>
+```
+
+The first dependency is the Spring Boot starter for Spring Integration. This dependency is essential to developing a Spring 
+Integration flow, regardless of what the flow may integrate with. The second dependency is for Spring Integration’s file 
+endpoint module. 
+Next you need to create a way for the application to send data into an integration flow so that it can be written to a file,
+so you’ll create a gateway like this:
+
+```java
+@MessagingGateway(defaultRequestChannel="textInChannel") // This declares a message gateway
+public interface FileWriterGateway {
+  void writeToFile(@Header(FileHeaders.FILENAME) String filename, String data); // Writes to a file
+}
+```
+
+`@MessagingGateway` tells Spring Integration to generate an implementation of this interface at runtime. The 
+`defaultRequestChannel` attribute of `@MessagingGateway` indicates that any messages resulting from a call to the interface 
+methods should be sent to the given message channel. In the above example, the `@Header` annotation indicates that the value 
+passed to filename should be placed in a message header.
+
+#### Defining integration flows with XML
+Example of xml configuration:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:int="http://www.springframework.org/schema/integration" 
+  xmlns:int-file="http://www.springframework.org/schema/integration/file"
+  xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans.xsd
+    http://www.springframework.org/schema/integration
+    http://www.springframework.org/schema/integration/spring-integration.xsd
+    http://www.springframework.org/schema/integration/file
+    http://www.springframework.org/schema/integration/file/spring-integration-file.xsd">
+
+<int:channel id="textInChannel" />
+    <int:transformer id="upperCase" input-channel="textInChannel" output-channel="fileWriterChannel" expression="payload.toUpperCase()" />
+<int:channel id="fileWriterChannel"/>
+<int-file:outbound-channel-adapter id="writer" channel="fileWriterChannel" directory="/tmp/files" mode="APPEND" append-new-line="true"/>
+</beans>
+```
+
+In this file:
+
+    * You configured a channel named textInChannel. You’ll recognize this as the same channel that’s set as the request 
+      channel for FileWriterGateway. When the writeToFile() method is called on FileWriterGateway
+    * You configured a transformer that receives messages from textInChannel. It uses a Spring Expression Language (SpEL) 
+      expression to call toUpperCase() on the message payload
+    * You configured the channel named fileWriterChannel. This channel serves as the conduit that connects the transformer 
+      with the outbound channel adapter
+    * You configured an outbound channel adapter using the int-file namespace. This XML namespace is provided by 
+      Spring Integration’s file module to write files, it receives messages from fileWriterChannel and writes the message 
+      payload to a file whose name is specified in the message’s file_name header in the directory specified in the 
+      directory attribute. If the file already exists, the file will be appended with a newline rather than overwritten
+
+Bare in mind that for this configuration to take effect, you'll need to import the xml file into your application. For 
+example, by usingSpring’s `@ImportResource` annotation.
+      
+#### Configuring integration flows in Java  
+Below is shown the same file-writing integration flow as before, but written in Java:
+
+```java
+@Configuration
+public class FileWriterIntegrationConfig { 
+    @Bean
+    @Transformer(inputChannel="textInChannel", outputChannel="fileWriterChannel") //Declares a Transformer
+    public GenericTransformer<String, String> upperCaseTransformer() {
+      return text -> text.toUpperCase(); //Functional interface implementing GenericTransformer
+    }
+    @Bean
+    @ServiceActivator(inputChannel="fileWriterChannel") //Declares a FileWriter
+    public FileWritingMessageHandler fileWriter() {
+       FileWritingMessageHandler handler = new FileWritingMessageHandler(new File("/tmp/sia5/files"));
+        handler.setExpectReply(false); // indicates that the service activator shouldn’t expect a reply channel 
+        handler.setFileExistsMode(FileExistsMode.APPEND);
+        handler.setAppendNewLine(true);
+        return handler;
+    }
+}
+```
+
+The transformer is a GenericTransformer. Because GenericTransformer is a functional interface, you’re able to provide its 
+implementation as a lambda that calls `toUpperCase()` on the message text. `@ServiceActivator` indicates that it’ll accept 
+messages from `fileWriterChannel` and hand the messages to the service defined by an instance of `FileWritingMessageHandler`.
+`FileWritingMessageHandler` is a message handler that writes a message payload to a file in a specified directory using a 
+filename specified in the message’s `file_name` header.
+
+#### Using Spring Integration’s DSL configuration
+Instead declaring an individual bean for each component, you’ll declare a single bean that defines the entire flow:
+
+```java
+
+@Bean
+public IntegrationFlow fileWriterFlow() {
+    return IntegrationFlows
+            .from(MessageChannels.direct("textInChannel")) //Inbound channel
+            .<String, String>transform(t -> t.toUpperCase()) //Transformer
+            .handle(Files.outboundAdapter(new File("/tmp/sia5/files")) //Handles writing to a file
+            .fileExistsMode(FileExistsMode.APPEND)
+            .appendNewLine(true))
+            .get();
+    }
+}
+```
+
+The above is simply a builder that connects the Transformer, channel and handler and the returns a bean of type 
+`IntegrationFlow`.
+
+### Surveying the Spring Integration landscape
+An integration flow is composed of one or more of the following components:
+
+
+    * Channels: Pass messages from one element to another
+    * Filters: Conditionally allow messages to pass through the flow based on some criteria
+    * Transformers: Change message values and/or convert message payloads from one type to another
+    * Routers: Direct messages to one of several channels, typically based on message headers
+    * Splitters: Split incoming messages into two or more messages, each sent to different channels
+    * Aggregators: The opposite of splitters, combining multiple messages from separate channels into a single message
+    * Service activators: Hand a message off to some Java method for processing, and then publish the return value on an 
+    output channel
+    * Channel adapters: Connect a channel to some external system or transport. They can accept input or write to a external 
+    system
+    * Gateways: Pass data into an integration flow via an interface
+    
+#### Message channels
+Spring Integration provides several channel implementations, including:
+
+    * PublishSubscribeChannel: Messages published into a PublishSubscribeChannel are passed on to one or more consumers. 
+    If there are multiple consumers, all of them receive the message
+    * QueueChannel: Messages published into a QueueChannel are stored in a queue until pulled by a consumer in a first in, 
+    first out (FIFO) fashion. If there are multiple consumers, only one of them receives the message
+    * PriorityChannel: Like QueueChannel but, rather than FIFO behavior, mes- sages are pulled by consumers based on the 
+    message priority header.
+    * RendezvousChannel: Like QueueChannel except that the sender blocks the channel until a consumer receives the message, 
+    effectively synchronizing the sender with the consumer
+    * DirectChannel: Like PublishSubscribeChannel but sends a message to a sin- gle consumer by invoking the consumer in the 
+    same thread as the sender. This allows for transactions to span across the channel
+    * ExecutorChannel: Similar to DirectChannel but the message dispatch occurs via a TaskExecutor, taking place in a 
+    separate thread from the sender. This channel type doesn’t support transactions that span the channel
+    * FluxMessageChannel—A Reactive Streams Publisher message channel based on Project Reactor’s Flux
+
+Input channels are automatically created, with DirectChannel as the default. To declare a different channel, you need to 
+declare it as a bean in the context, and reference this channel by name in the integration flow definition. 
+
+```java
+@Bean
+public MessageChannel orderChannel() {
+  return new PublishSubscribeChannel(); // This channel can be referenced as: @ServiceActivator(inputChannel="orderChannel")
+}
+```
+
+The DSL equivalent is:
+
+```java
+@Bean
+public IntegrationFlow orderFlow() {
+    return IntegrationFlows
+        ...
+        .channel("orderChannel")
+        ...
+        .get();
+}
+```
+
+If you’re using QueueChannel, the consumers must be configured with a poller like in: 
+`@ServiceActivator(inputChannel="orderChannel", poller=@Poller(fixedRate="1000"))`
+
+#### Filters
+Example of a filter filtering non even numbers from a channel receiving integer numbers:
+
+```java
+@Filter(inputChannel="numberChannel", outputChannel="evenNumberChannel")
+public boolean evenNumberFilter(Integer number) {
+    return number % 2 == 0;
+}
+``` 
+
+The DSL equivalent is:
+
+```java
+@Bean
+public IntegrationFlow evenNumberFlow(AtomicInteger integerSource) {
+    return IntegrationFlows
+        ...
+        .<Integer>filter((p) -> p % 2 == 0)
+        ...
+        .get();
+}    
+```
+
+#### Transformers
+Transformers perform some operation on messages, typically resulting in a different message or even a different payload type.
+The following example is a Transformer applied to the previous filter that transform the numbers to roman numbers:
+
+```java
+@Bean
+@Transformer(inputChannel="evenNumberChannel", outputChannel="romanNumberChannel")
+public GenericTransformer<Integer, String> romanNumTransformer() {
+    return RomanNumbers::toRoman;
+}
+``` 
+
+The DSL equivalent is:
+
+```java
+@Bean
+public IntegrationFlow transformerFlow() {
+    return IntegrationFlows
+        ...
+        .transform(RomanNumbers::toRoman)
+        ...
+        .get();
+}    
+```
+
+#### Routers
+Based on some routing criteria, allow for branching in an integration flow, directing messages to different channels:
+
+```java
+@Bean
+@Router(inputChannel="numberChannel")
+public AbstractMessageRouter evenOddRouter() {
+    return new AbstractMessageRouter() {
+        @Override
+        protected Collection<MessageChannel> determineTargetChannels(Message<?> message) {
+          Integer number = (Integer) message.getPayload();
+          if (number % 2 == 0) {
+            return Collections.singleton(evenChannel());
+          }
+          return Collections.singleton(oddChannel());
+        }
+    };
+}
+@Bean
+public MessageChannel evenChannel() {
+    return new DirectChannel();
+}
+@Bean
+public MessageChannel oddChannel() {
+    return new DirectChannel();
+}
+```
+
+The same in its DSL equivalent:
+
+```java
+
+@Bean
+public IntegrationFlow numberRoutingFlow(AtomicInteger source) {
+  return IntegrationFlows
+    ...
+    .<Integer, String>route(n -> n%2==0 ? "EVEN":"ODD", mapping -> mapping
+      .subFlowMapping("EVEN", sf -> sf.<Integer, Integer>transform(n -> n * 10).handle((i,h) -> { ... }))
+      .subFlowMapping("ODD", sf -> sf.transform(RomanNumbers::toRoman).handle((i,h) -> { ... }))
+    ) .get();
+}
+```
+
+#### Splitters
+Splitters can be useful in the following situations:
+
+    * A message payload contains a collection of items of the same type but you’d like to process as individual message payloads
+    * A message payload carries information that can be split into two or more messages of different types
+    
+Suppose that you want to split a message carrying a purchase order into the billing information and the list of line items: 
+
+```java
+public class OrderSplitter {
+    public Collection<Object> splitOrderIntoParts(PurchaseOrder po) {
+        ArrayList<Object> parts = new ArrayList<>();
+        parts.add(po.getBillingInfo());
+        parts.add(po.getLineItems());
+        return parts;
+    }
+}
+
+// And then define the splitter in the context
+@Bean
+@Splitter(inputChannel="poChannel", outputChannel="splitOrderChannel")
+public OrderSplitter orderSplitter() { 
+    return new OrderSplitter();
+}
+// Finally, use a router to route each of the objects to the appropriate channel
+@Bean
+@Router(inputChannel="splitOrderChannel")
+public MessageRouter splitOrderRouter() {
+  PayloadTypeRouter router = new PayloadTypeRouter();
+  router.setChannelMapping(BillingInfo.class.getName(), "billingInfoChannel");
+  router.setChannelMapping(List.class.getName(), "lineItemsChannel");
+  return router;
+}
+```
+
+The equivalent DSL is:
+
+```java
+return IntegrationFlows
+  ...
+    .split(orderSplitter())
+    .<Object, String> route(p -> {
+          if (p.getClass().isAssignableFrom(BillingInfo.class)) {
+            return "BILLING_INFO";
+          } else {
+            return "LINE_ITEMS";
+          }
+        }, mapping -> mapping
+          .subFlowMapping("BILLING_INFO", sf -> sf.<BillingInfo> handle((billingInfo, h) -> {...}))
+          .subFlowMapping("LINE_ITEMS", sf -> sf.split().<LineItem> handle((lineItem, h) -> {... }))
+).get();
+
+```
+
+#### Service activators
+Service activators receive messages from an input channel and send those messages to an implementation of `MessageHandler`.
+
+```java
+@Bean
+@ServiceActivator(inputChannel="someChannel")
+public MessageHandler sysoutHandler() {
+  return message -> System.out.println("Message payload:  " + message.getPayload());
+}
+```
+
+You could also declare a service activator that processes the data in the incoming message before returning a new payload.
+In that case, the bean should be a `GenericHandler` rather than a `MessageHandler`:
+
+```java
+// When the order arrives, it’s saved via a repository
+// the resulting saved Order is returned to be sent to the output channel whose name is completeChannel
+@Bean
+@ServiceActivator(inputChannel="orderChannel", outputChannel="completeOrder")
+public GenericHandler<Order> orderHandler(OrderRepository orderRepo) {
+  return (payload, headers) -> return orderRepo.save(payload); 
+}
+```
+
+The DSL example:
+
+```java
+public IntegrationFlow someFlow() {
+  return IntegrationFlows
+    ...
+      .handle(msg -> System.out.println("Message payload:  " + msg.getPayload())).get();
+}
+```
+
+#### Gateways
+Channel adapters represent the entry and exit points of an integration flow. Inbound channel adapters can take many forms,
+ depending on the source of the data they introduce into the flow.
+ 
+```java
+// The example introduces incrementing numbers from an AtomicInteger into the flow
+@Bean
+@InboundChannelAdapter(poller=@Poller(fixedRate="1000"), channel="numberChannel")
+public MessageSource<Integer> numberSource(AtomicInteger source) {
+    return () -> {
+        return new GenericMessage<>(source.getAndIncrement());
+    };
+}
+```
+
+The DSL example:
+
+```java
+@Bean
+public IntegrationFlow someFlow(AtomicInteger integerSource) {
+    return IntegrationFlows.from(integerSource, "getAndIncrement", c -> c.poller(Pollers.fixedRate(1000)))....get();
+}
+```
+
+Another example of input channel but of type `FileReadingMessageSource` which monitors a specified directory and submits any 
+files that are written to that directory as messages to a channel:
+
+```java
+@Bean 
+@InboundChannelAdapter(channel="file-channel",poller=@Poller(fixedDelay="1000")) 
+public MessageSource<File> fileReadingMessageSource() {
+    FileReadingMessageSource sourceReader = new FileReadingMessageSource();
+    sourceReader.setDirectory(new File(INPUT_DIR));
+    sourceReader.setFilter(new SimplePatternFileListFilter(FILE_PATTERN));
+    return sourceReader;
+}
+``` 
+
+or with DSL:
+```java
+@Bean
+public IntegrationFlow fileReaderFlow() {
+  return IntegrationFlows.from(Files.inboundAdapter(new File(INPUT_DIR)).patternFilter(FILE_PATTERN)).get();
+}
+```
+
+As with outbound channels, Service activators, implemented as message handlers often acts as one.
+
+#### Endpoint modules
+Spring Integration provides over two dozen endpoint modules containing channel adapters, each of the endpoint modules offers 
+channel adapters that can be either declared as beans when using Java configuration or referenced via static methods when 
+using Java DSL configuration. 
+
+### Creating an email integration flow
