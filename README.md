@@ -10,6 +10,7 @@
 7. [Chapter 7: Consuming REST services](#Chapter7)
 8. [Chapter 8: Sending messages asynchronously](#Chapter8)
 9. [Chapter 9: Integrating Spring](#Chapter9)
+10. [Chapter 10: Introducing Reactor](#Chapter10)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -1871,4 +1872,5 @@ Spring Integration provides over two dozen endpoint modules containing channel a
 channel adapters that can be either declared as beans when using Java configuration or referenced via static methods when 
 using Java DSL configuration. 
 
-### Creating an email integration flow
+
+## Chapter 10: Introducing Reactor<a name="Chapter10"></a>
