@@ -11,6 +11,7 @@
 8. [Chapter 8: Sending messages asynchronously](#Chapter8)
 9. [Chapter 9: Integrating Spring](#Chapter9)
 10. [Chapter 10: Introducing Reactor](#Chapter10)
+11. [Chapter 11: Developing reactive APIs](#Chapter11)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -1874,3 +1875,194 @@ using Java DSL configuration.
 
 
 ## Chapter 10: Introducing Reactor<a name="Chapter10"></a>
+
+### Understanding reactive programming
+In imperative programming, you write code as a list of instructions to be followed, one at a time, in the order that 
+they’re encountered. A task is performed and the program waits for it to complete before moving on to the next task. While a 
+task is being performed, the thread that invoked that task is blocked, unable to do anything else until the task completes.
+Reactive programming is functional and declarative in nature. Rather than describe a set of steps that are to be performed
+ sequentially, reactive programming involves describing a pipeline or stream through which data flows. 
+ 
+#### Defining Reactive Streams
+Reactive Streams aims to provide a standard for asynchronous stream processing with non-blocking backpressure. The Reactive 
+Streams specification can be summed up by four interface definitions.
+`Publisher`, produces data:
+
+```java
+public interface Publisher<T> {
+  void subscribe(Subscriber<? super T> subscriber);
+}
+```
+
+`Subscriber`, which consumes data that receives from the producer:
+
+```java
+public interface Subscriber<T> {
+  void onSubscribe(Subscription sub);
+  void onNext(T item);
+  void onError(Throwable ex);
+  void onComplete();
+}
+```
+
+`Subscription`, it is a channel that connects producers and subscribers. When the Publisher calls `onSubscribe()`, it passes 
+a `Subscription` object to the `Subscriber`:
+
+```java
+public interface Subscription {
+  void request(long n); //n is the number of data object that the subscriber is willing to accept (backpressure)
+  void cancel();
+}
+```
+
+After the `Publisher` has sent as many items as were requested, the `Subscriber` can call `request()` again to request more.
+For every item that’s published by the Publisher, the onNext() method will be called to deliver the data to the Subscriber. 
+If the Publisher has no more data to send and isn’t going to produce anymore data, it will call onComplete() to tell the 
+Subscriber that it’s out of business.
+And `Processor`, which receives data and process it in some way, it is like a combination of `Subscriber` and `Publisher`:
+
+```java
+ public interface Processor<T, R> extends Subscriber<T>, Publisher<R> {}
+```
+
+As a `Subscriber`, a `Processor` will receive data and process it in some way. Then it will switch hats and act as a 
+`Publisher` to publish the results to its `Subscribers`.
+
+### Getting started with Reactor
+#### Diagramming reactive flows
+Reactive flows are often illustrated with marble diagrams, which depicts a timeline of data as it flows through a Flux (a 
+Publisher representing a pipeline of zero, one, or many -potentially infinite- data items), or Mono (a Publisher 
+representing a pipeline of no more than one data items) at the top, an operation in the middle, and the timeline of the 
+resulting Flux or Mono at the bottom.
+
+#### Adding Reactor dependencies
+To get started with Reactor, add the following dependency to the project build:
+
+```xml
+<dependency>
+  <groupId>io.projectreactor</groupId>
+  <artifactId>reactor-core</artifactId>
+</dependency>
+```
+
+To add Reactor's test dependency to your build:
+
+```xml
+<dependency>
+  <groupId>io.projectreactor</groupId>
+  <artifactId>reactor-test</artifactId>
+   <scope>test</scope>
+  </dependency>
+```
+
+If you want to use Reactor in a non-Spring Boot project, you’ll need to set up Reactor’s BOM (bill of materials) in the 
+build:
+
+```xml
+<dependencyManagement>
+  <dependencies>
+      <dependency>
+          <groupId>io.projectreactor</groupId>
+          <artifactId>reactor-bom</artifactId>
+          <version>Bismuth-RELEASE</version>
+          <type>pom</type>
+          <scope>import</scope>
+      </dependency>
+  </dependencies>
+</dependencyManagement>
+```
+
+### Applying common reactive operations
+Between Flux and Mono, there are over 500 operations, each of which can be loosely categorized as creation, combination, 
+transformation and logic operations.
+
+#### Creating reactive types
+Reactor provides several operations for creating Fluxes and Monos:
+
+##### Creating from objects
+If you have one or more objects that you’d like to create a Flux or Mono from, you can use the static just() method on 
+Flux or Mono to create a reactive type whose data is driven by those objects: `Flux.just("Apple", "Orange", "Grape");`
+At this point, the Flux has been created, but it has no subscribers. To add a subscriber, you can call the subscribe() 
+method on the Flux: `fruitFlux.subscribe(f -> System.out.println("Here's some fruit: " + f));` Upon calling subscribe(), 
+the data starts flowing. 
+Given a Flux or Mono, `StepVerifier` subscribes to the reactive type and then applies assertions against the data as it flows
+ through the stream, finally verifying that the stream completes as expected: 
+`StepVerifier.create(fruitFlux).expectNext("Apple").expectNext("Orange").expectNext("Grape").verifyComplete();`
+
+##### Creating from collections
+A Flux can also be created from an array, Iterable, or Java Stream: `Flux.fromArray(theArray);`. If you need to create a Flux
+ from a `java.util.List`, `java.util.Set`, or any other implementation of `java.lang.Iterable`, you can pass it into the 
+static `fromIterable()` method. For a `java.util.Stream` use the `fromStream()` method.
+
+##### Generating flux data
+Sometimes you don’t have any data to work with and just need Flux to act as a counter, emitting a number that increments with
+each new value. To create a counter Flux, you can use the static `range(int init, int end)` method. To create a flux that
+emits data in regular intervals of time use the static `interval(Duration theDuration)` method, the value emitted by an 
+interval Flux starts with 0 and increments on each successive item. Because `interval()` isn’t given a maximum value, it 
+will potentially run forever, use the `take()` operation to limit the results.
+
+#### Combining reactive types
+##### Merging reactive types
+If you have two Flux streams and need to create a single resulting Flux that will produce data as it becomes available from 
+either of the upstream Flux streams, use the `flux1.mergeWith(flux2)`. A Flux will publish data as quickly as it possibly 
+can, but you use a `delayElements(theDuration)` to slow down the publication of data. You can apply a `delaySubscription(d)` 
+operation to a Flux so that it won’t emit any data until the duration d has passed following a subscription. `mergeWith()`
+ can’t guarantee a perfect back and forth between its sources, use the static method `zip()` operation instead for this, 
+ which produces  a tuple of items, where the tuple contains one item from each source Flux.
+
+##### Selecting the first reactive type to publish
+Suppose you have two Flux objects, and rather than merge them together, you merely want to create a new Flux that emits 
+the values from the first Flux that produces a value. `Flux.first(flux1, flux2)` operation picks the first of two Flux 
+objects and echoes the values it publishes.
+
+#### Transforming and filtering reactive streams
+##### Filtering data from reactive types
+To disregard the first n entries, use the `skip(n)` operation which produces a new flux that skips over a specified number of
+ items before emitting the remaining items from the source Flux. To skip based on duration instead of number of elements, 
+ use the skip method and pass it a `Duration` object. `take` which is the inverse of skip, is also overloaded.
+Given a Predicate that decides whether an item will pass through the Flux or not, the `filter()` operation lets you 
+ selectively publish based on whatever criteria you want.
+`distinct()` method results in a Flux that only publishes items from the source Flux that haven’t already been published.  
+
+##### Mapping reactive data
+Reactor’s types offer `map()` and `flatMap()` operations to transform published items to some other form or type. The mapping 
+is performed synchronously, as each item is published by the source Flux. If you want to perform the mapping asynchronously, 
+you should consider the `flatMap()` operation. The `flatMap()` maps each object to a new Mono or Flux. The results of the 
+Mono or Flux are flattened into a new resulting Flux:
+
+```java
+ Flux<Player> playerFlux = Flux
+    .just("Michael Jordan", "Scottie Pippen", "Steve Kerr")
+    .flatMap(n -> Mono.just(n)
+        .map(p -> {
+            String[] split = p.split("\\s");
+            return new Player(split[0], split[1]);
+          })
+        .subscribeOn(Schedulers.parallel()) // indicates that each subscription should take place in a parallel thread
+);
+```
+
+`Schedulers` supports several concurrency models:
+
+    * immediate(): Executes the subscription in the current thread
+    * single(): Executes the subscription in a single, reusable thread and reuses the same thread for all callers
+    * newSingle(): Executes the subscription in a per-call dedicated thread
+    * elastic(): Executes the subscription in a worker pulled from an unbounded, elastic pool. New worker threads are 
+      created as needed, and idle workers are disposed of (by default, after 60 seconds)
+    * parallel(): Executes the subscription in a worker pulled from a fixed-size pool, sized to the number of CPU cores
+      
+##### Buffering data on a reactive stream
+The `buffer()` operation breaks the stream of data from the flux into bite-size chunks (returns a flux which elements are 
+listx of size equal to the number passed to the buffer operation). When you combine `buffer()` with `flatMap()`, it enables 
+each of the List collections to be processed in parallel. To collect everything that a Flux emits into a List, you can 
+call `buffer()` with no arguments. The `log()` operation logs all Reactive Streams events (or use the `collectList()` 
+operation which produces a Mono that publishes a List).
+`collectMap()` operation results in a Mono that publishes a Map that’s populated with entries whose key is calculated by a 
+given Function (if the function produces duplicates, the last entry flowing through the stream overrides earlier entries).
+
+#### Performing logic operations on reactive types
+The `all()` and `any()` operations are used to know if the entries published by a Mono or Flux match some criteria. These 
+two operations results in a Mono of type Boolean.
+
+
+## Chapter 11: Developing reactive APIs<a name="Chapter11"></a>
