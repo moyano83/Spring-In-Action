@@ -12,6 +12,7 @@
 9. [Chapter 9: Integrating Spring](#Chapter9)
 10. [Chapter 10: Introducing Reactor](#Chapter10)
 11. [Chapter 11: Developing reactive APIs](#Chapter11)
+12. [Chapter 12: Persisting data reactively](#Chapter12)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -2066,3 +2067,289 @@ two operations results in a Mono of type Boolean.
 
 
 ## Chapter 11: Developing reactive APIs<a name="Chapter11"></a>
+### Working with Spring WebFlux
+Typical Servlet-based web frameworks, such as Spring MVC, are blocking and multi- threaded in nature, using a single 
+thread per connection. Asynchronous web frameworks, in contrast, achieve higher scalability with fewer threads—generally 
+one per CPU core. By applying a technique known as event looping, these frameworks are able to handle many requests per 
+thread. In an event loop, everything is handled as an event, including requests and callbacks from intensive operations 
+like database and network operations. When a costly operation is needed, the event loop registers a callback for that 
+operation to be performed in parallel, while it moves on to handle other events.
+
+#### Introducing Spring WebFlux
+Opposite to the Spring MVC, Spring WebFlux doesn’t have ties to the Servlet API, so it builds on top of a Reactive HTTP 
+API, which is a reactive approximation of the same functionality provided by the Servlet API. Spring WebFlux doesn't 
+require a servlet container to run on, instead, it can run on any non-blocking web container (Netty, Undertow, Tomcat, Jetty,
+ or any Servlet 3.1 or higher container). To add Spring WebFlux to yout project, you’ll need to add the Spring Boot WebFlux 
+ starter dependency instead of the standard web starter (for example, spring-boot-starter-web):
+ 
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-webflux</artifactId>
+</dependency>
+```
+
+Spring WebFlux controller methods usually accept and return reactive types, like Mono and Flux, instead of domain types and
+ collections (although Spring MVC controller methods can also return a Mono or Flux).
+ 
+#### Writing reactive controllers
+A way to create a reactive controller in Spring, is to return a flux type like in:
+
+```java
+return Flux.fromIterable(tacoRepo.findAll()).take(12);
+```  
+
+You can also rewrite your controller to look something like this:
+
+```java
+@GetMapping("/recent")
+public Flux<Taco> recentTacos() {
+    return tacoRepo.findAll().take(12); //This needs to have a reactive repository in place that returns a Flux<Taco>
+}
+```
+
+The above repository can be written by extending `ReactiveCrudRepository<T, K>`. Both MVC and WebFlux controllers have 
+_@RestController_, _@RequestMapping_ and _@GetMapping_ annotations, therefore is a matter of changing the return type. The 
+framework will call _subscribe()_ for you, which means that when a request for _\/design\/_ recent is handled, the 
+_recentTacos()_ method will be called and will return before the data is even fetched from the database. Remember that a 
+call to return a single element can be wrapped to return a _Mono<T>_ to make it reactive.
+
+##### Working With RxJava Types
+With Spring WebFlux, you can also choose to work with RxJava types like _Observable_ and _Single_. Spring WebFlux 
+controller methods can also return RxJava’s _Completable_, which is equivalent to a _Mono<Void>_ in Reactor. WebFlux can also
+return a _Flowable_ as an alternative to _Observable_ or Reactor’s Flux.
+ 
+##### Handling Input Reactively
+With Spring WebFlux, you can also accept a Mono or a Flux as input to a handler method, making it a fully non-blocking, 
+request-handling method:
+
+```java
+@PostMapping(consumes="application/json")
+@ResponseStatus(HttpStatus.CREATED)
+public Mono<Taco> postTaco(@RequestBody Mono<Taco> tacoMono) {
+    return tacoRepo.saveAll(tacoMono).next();
+}
+```
+
+By accepting a _Mono<Taco>_ as input, the method is invoked immediately without waiting for the Taco to be resolved from the
+ request body. Because the repository is also reactive, it’ll accept a _Mono_ and immediately return a _Flux<Taco>_, from 
+ which you call _next()_ and return the resulting _Mono<Taco>_ all before the request is even processed.
+ 
+### Defining functional request handlers
+As an alternative to WebFlux, Spring 5 has introduced a new functional programming model for defining reactive APIs. 
+Writing an API using Spring’s functional programming model involves four primary types:
+
+    * RequestPredicate: Declares the kind(s) of requests that will be handled
+    * RouterFunction: Declares how a matching request should be routed to handler code
+    * ServerRequest: Represents an HTTP request, including access to header and body information
+    * ServerResponse: Represents an HTTP response, including header and body information
+
+An example of how to use the above types is shown below:
+
+```java
+
+import static org.springframework.web. reactive.function.server.RequestPredicates.GET;
+import static org.springframework.web. reactive.function.server.RouterFunctions.route;
+import static org.springframework.web. reactive.function.server.ServerResponse.ok;
+import static reactor.core.publisher.Mono.just;
+
+@Configuration
+public class RouterFunctionConfig {
+    @Bean
+    public RouterFunction<?> helloRouterFunction() {
+        return route(GET("/hello"), request -> ok().body(just("Hello World!"), String.class));
+    }
+}
+```
+
+The _route()_ method from RouterFunctions accepts two parameters: a Request- Predicate and a function to handle matching 
+requests. The _GET()_ method from _RequestPredicates_ declares a _RequestPredicate_ that matches HTTP GET requests for the 
+/hello path. If you need to handle a different kind of request, you only need to call _andRoute()_ to declare another 
+_RequestPredicate-to-function_ mapping. For example, here’s how you might add another handler for GET requests for /bye:
+
+```java
+return route(GET("/hello"), request -> ok().body(just("Hello World!"), String.class))
+            .andRoute(GET("/bye"),request -> ok().body(just("See ya!"), String.class));
+```
+
+The following configuration class is a functional analog to a Spring MVC configuration class:
+
+```java
+@Configuration
+public class RouterFunctionConfig {
+    @Autowired
+    private TacoRepository tacoRepo;
+    @Bean
+    public RouterFunction<?> routerFunction() {
+        return route(GET("/design/taco"), this::recents).andRoute(POST("/design"), this::postTaco);
+    }
+    public Mono<ServerResponse> recents(ServerRequest request) { 
+        return ServerResponse.ok().body(tacoRepo.findAll().take(12), Taco.class);
+    }
+    public Mono<ServerResponse> postTaco(ServerRequest request) {
+        Mono<Taco> taco = request.bodyToMono(Taco.class);
+        Mono<Taco> savedTaco = tacoRepo.save(taco);
+        return ServerResponse.created(URI.create( "http://localhost:8080/design/taco/" + savedTaco.getId()))
+            .body(savedTaco, Taco.class);
+    }
+}
+```
+
+_RouterFunction_ is created to handle GET requests for /design/taco and POST requests for /design.
+
+### Testing reactive controllers
+Spring 5 has introduced WebTestClient, a new test utility that makes it easy to write tests for reactive controllers 
+written with Spring WebFlux.
+
+#### Testing GET Requests
+To test a controller call `WebTestClient.bindToController(new ControllerToBeTested)` to create an instance of 
+_WebTestClient_. Calling `get().uri("/aUrl")` over your _WebTestClient_, describes the request you want to issue, calling 
+to `exchange()` submits the request, and finally, by calling `expectStatus()`you can affirm that the response is as 
+expected. For those cases where it may be clumsy to use `jsonPath()`, _WebTestClient_ offers `json()`, which accepts a 
+String parameter containing the JSON to compare the response against. The `expectBodyList()` method accepts either a 
+Class or a _ParameterizedTypeReference_ indicating the type of elements in the list and returns a ListBodySpec object to 
+make assertions against.
+
+#### Testing POST requests
+With WebTestClient you can test any kind of HTTP method, including GET, POST, PUT, PATCH, DELETE, and HEAD requests.
+
+#### Testing with a live server
+Sometimes you may need to test a WebFlux controller in the context of a server like Netty or Tomcat and maybe with a 
+repository or other dependencies. To write a WebTestClient integration test, you start by annotating the test class with 
+_@RunWith_ and _@SpringBootTest_ like any other Spring Boot integration test: 
+
+```java
+@RunWith(SpringRunner.class) 
+@SpringBootTest(webEnvironment=WebEnvironment.RANDOM_PORT) 
+
+public class DesignTacoControllerWebTest {
+    @Autowired
+    private WebTestClient testClient;
+}
+```
+
+### Consuming REST APIs reactively
+_RestTemplate_ is an old-timer, having been introduced in Spring version 3.0, but all of the methods provided by 
+_RestTemplate_ deal in non-reactive domain types and collections. Spring 5 offers _WebClient_ as a reactive alternative to 
+_RestTemplate_.  The general usage pattern for working with WebClient is:
+
+    * Create an instance of WebClient (or inject a WebClient bean) 
+    * Specify the HTTP method of the request to send
+    * Specify the URI and any headers that should be in the request 
+    * Submit the request
+    * Consume the response
+    
+####  GETting resources
+Suppose that you need to fetch an Ingredient object by its ID from the application, with WebClient, you build the 
+request, retrieve a response, and then extract a Mono that publishes the Ingredient object:
+
+```java
+Mono<Ingredient> ingredient = WebClient
+    .create()
+    .get()
+    .uri("http://localhost:8080/ingredients/{id}", ingredientId)
+    .retrieve()
+    .bodyToMono(Ingredient.class); // use .bodyToFlux(TheClass.class) to retrieve a Flux<TheClass>
+
+ingredient.subscribe(i -> { ... })
+```
+Here you create a new _WebClient_ instance with `create()` and use `get()` and `uri()` to define a GET request. The 
+`retrieve()` method executes the request. A call to `bodyToMono()` extracts the response’s body payload into a 
+_Mono<Ingredient>_ on which you can continue applying addition Mono operations.
+
+##### Making requests with a base URI
+You may find yourself using a common base URI for many different requests. In that case, it can be useful to create a 
+WebClient bean with a base URI and inject it anywhere it’s needed like in `WebClient.create("http://localhost:8080")`, 
+subsequent calls can be made using relative uris.
+
+##### Timing out on long-running requests
+To avoid having your client requests held up by a sluggish network or service, you can use the `timeout()` method from Flux 
+or Mono to put a limit on how long you’ll wait for data to be published. Call This method before the `subscribe()` call.
+
+#### Sending resources
+To send a Flux or Mono, pass them on the `.body(<Flux or Mono>, TypeClass.class)` method of the _WebClient_. Alternatively
+ if instead you have the raw domain object on hand, you can use `.syncBody(instanceOfTheClass)`. PUT requests typically have 
+ empty response payloads, so you must ask bodyToMono() to return a Mono of type Void. On subscribing to that Mono, the 
+ request will be sent.
+ 
+#### Deleting resources
+WebClient also allows the removal of resources by way of its `delete()` method:
+`Mono<Void> result = webClient.delete().uri("/some/{id}", theId) .retrieve().bodyToMono(Void.class).subscribe();`
+
+#### Handling errors
+If you need to handle errors, then a call to `onStatus()` can be used to specify how various HTTP status codes should be 
+dealt with. It accepts two functions: a predicate function, which is used to match the HTTP status, and a function that given
+a _ClientResponse_ object, returns a _Mono<Throwable>_. When subscribing to a Mono or Flux that might end in error, it’s 
+important to register an error consumer as well as a data consumer in the call to `subscribe()`:
+`ingredientMono.subscribe(ingredient -> {/*handle the ingredient data ...}*/, error-> {/* deal with the error*/});`
+The second lambda (the error consumer) is given a _WebClientResponseException_, which is not very specific, by adding a 
+custom error handler, you can provide code that translates a status code to a Throwable of your own choosing:
+
+```java
+Mono<Ingredient> ingredientMono = webClient .get()
+    .uri("http://localhost:8080/ingredients/{id}", ingredientId) .retrieve()
+    .onStatus(HttpStatus::is4xxClientError,response -> Mono.just(new UnknownIngredientException()))
+    .bodyToMono(Ingredient.class);
+``` 
+
+#### Exchanging requests
+You’ve used the `retrieve()` method to signify sending a request when working with _WebClient_. This method returned an 
+object of type _ResponseSpec_, which is fine for simple cases, but it’s limited in a few ways (you can't access header or 
+cookie values). The `exchange()` method instead, returns a Mono of type _ClientResponse_ to which you can apply reactive 
+operations.
+
+### Securing reactive web APIs
+Spring Security web security model has been built around servlet filters, but when writing a web application with Spring 
+WebFlux, there’s no guarantee that servlets are even involved. Starting with version 5.0.0, Spring Security uses Spring’s 
+WebFilter, a Spring-specific analog to servlet filters that doesn’t demand dependence on the servlet API. Spring Security 
+comes as the same Spring Boot security starter:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+```
+
+#### Configuring reactive web security
+Configuring Spring Security to secure a Spring MVC web application typically involves creating a new configuration class 
+that extends _WebSecurityConfigurerAdapter_ and is annotated with _@EnableWebSecurity_. The same configuration for a reactive 
+Spring WebFlux application would like like this:
+
+```java
+@Configuration
+@EnableWebFluxSecurity //Instead of @EnableWebSecurity
+public class SecurityConfig {
+    @Bean
+    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) { //Replaces the configure() method
+        return http
+            .authorizeExchange() //Similar to authorizeRequests()
+            .pathMatchers("/design", "/orders") //Similar to antMatchers()
+            .hasAuthority("USER")
+            .anyExchange()
+            .permitAll()
+            .and()
+            .build();
+    }
+}
+``` 
+
+#### Configuring a reactive user details service
+In a reactive security configuration, you declare a _ReactiveUserDetailsService_ bean, which is the equivalent to the 
+_UserDetailsService_. _ReactiveUserDetailsService_ requires implementation of `findByUsername()` method, which returns a 
+_Mono<userDetails>_ instead of a raw _UserDetails_ object:
+
+```java
+@Service
+public ReactiveUserDetailsService userDetailsService(UserRepository userRepo) {
+    return new ReactiveUserDetailsService() {
+        @Override
+        public Mono<UserDetails> findByUsername(String username) {
+            return userRepo.findByUsername(username).map(user -> {return user.toUserDetails();});
+        }
+    };
+}
+```
+
+
+## Chapter 12: Persisting data reactively<a name="Chapter12"></a>
