@@ -1,7 +1,7 @@
 package com.moyajor.springinaction.data.jdbc;
 
 import com.moyajor.springinaction.data.IngredientRepository;
-import com.moyajor.springinaction.model.Ingredient;
+import com.moyajor.springinaction.model.db.Ingredient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;

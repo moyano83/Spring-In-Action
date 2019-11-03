@@ -1,7 +1,7 @@
 package com.moyajor.springinaction.data;
 
-import com.moyajor.springinaction.model.Order;
-import com.moyajor.springinaction.model.User;
+import com.moyajor.springinaction.model.db.Order;
+import com.moyajor.springinaction.model.db.User;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;

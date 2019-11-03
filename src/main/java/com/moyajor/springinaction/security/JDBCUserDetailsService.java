@@ -1,7 +1,7 @@
 package com.moyajor.springinaction.security;
 
 import com.moyajor.springinaction.data.UserRepository;
-import com.moyajor.springinaction.model.User;
+import com.moyajor.springinaction.model.db.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;

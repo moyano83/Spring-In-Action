@@ -1,4 +1,4 @@
-package com.moyajor.springinaction.model;
+package com.moyajor.springinaction.model.db;
 
 import lombok.AccessLevel;
 import lombok.Data;

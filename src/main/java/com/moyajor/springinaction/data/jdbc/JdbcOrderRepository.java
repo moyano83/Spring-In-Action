@@ -2,8 +2,8 @@ package com.moyajor.springinaction.data.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moyajor.springinaction.data.OrderRepository;
-import com.moyajor.springinaction.model.Order;
-import com.moyajor.springinaction.model.Taco;
+import com.moyajor.springinaction.model.db.Order;
+import com.moyajor.springinaction.model.db.Taco;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;

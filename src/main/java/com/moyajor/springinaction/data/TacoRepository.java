@@ -1,6 +1,6 @@
 package com.moyajor.springinaction.data;
 
-import com.moyajor.springinaction.model.Taco;
+import com.moyajor.springinaction.model.db.Taco;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TacoRepository extends JpaRepository<Taco, Long> {

@@ -3,7 +3,7 @@ import static org.springframework.hateoas.mvc.ControllerLinkBuilder.*;
 import java.util.List;
 
 import com.moyajor.springinaction.data.jpa.TacoRepository;
-import com.moyajor.springinaction.model.Taco;
+import com.moyajor.springinaction.model.db.Taco;
 import com.moyajor.springinaction.web.api.resource.TacoResource;
 import com.moyajor.springinaction.web.api.resource.TacoResourceAssembler;
 import org.springframework.data.domain.PageRequest;

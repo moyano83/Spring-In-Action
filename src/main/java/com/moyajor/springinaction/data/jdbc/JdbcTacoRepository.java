@@ -1,8 +1,8 @@
 package com.moyajor.springinaction.data.jdbc;
 
 import com.moyajor.springinaction.data.TacoRepository;
-import com.moyajor.springinaction.model.Ingredient;
-import com.moyajor.springinaction.model.Taco;
+import com.moyajor.springinaction.model.db.Ingredient;
+import com.moyajor.springinaction.model.db.Taco;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementCreator;

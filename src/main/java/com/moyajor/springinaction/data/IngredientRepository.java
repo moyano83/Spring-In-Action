@@ -1,6 +1,6 @@
 package com.moyajor.springinaction.data;
 
-import com.moyajor.springinaction.model.Ingredient;
+import com.moyajor.springinaction.model.db.Ingredient;
 
 public interface IngredientRepository {
 

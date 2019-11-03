@@ -1,7 +1,7 @@
 package com.moyajor.springinaction.web.api.resource;
 
 
-import com.moyajor.springinaction.model.Taco;
+import com.moyajor.springinaction.model.db.Taco;
 import org.springframework.hateoas.mvc.ResourceAssemblerSupport;
 
 public class TacoResourceAssembler extends ResourceAssemblerSupport<Taco, TacoResource> {

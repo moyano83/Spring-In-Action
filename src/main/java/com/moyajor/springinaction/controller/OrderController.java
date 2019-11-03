@@ -1,8 +1,8 @@
 package com.moyajor.springinaction.controller;
 
 import com.moyajor.springinaction.data.OrderRepository;
-import com.moyajor.springinaction.model.Order;
-import com.moyajor.springinaction.model.User;
+import com.moyajor.springinaction.model.db.Order;
+import com.moyajor.springinaction.model.db.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;

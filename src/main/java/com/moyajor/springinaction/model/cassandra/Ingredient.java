@@ -1,7 +1,6 @@
-package com.moyajor.springinaction.model;
-
-import javax.persistence.Entity;
-import javax.persistence.Id;
+package com.moyajor.springinaction.model.cassandra;
+import org.springframework.data.cassandra.core.mapping.PrimaryKey;
+import org.springframework.data.cassandra.core.mapping.Table;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -10,9 +9,9 @@ import lombok.RequiredArgsConstructor;
 @Data
 @RequiredArgsConstructor
 @NoArgsConstructor(access=AccessLevel.PRIVATE, force=true)
-@Entity
+@Table("ingredients")
 public class Ingredient {
-    @Id
+    @PrimaryKey
     private final String id;
     private final String name;
     private final Type type;

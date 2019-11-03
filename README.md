@@ -13,6 +13,7 @@
 10. [Chapter 10: Introducing Reactor](#Chapter10)
 11. [Chapter 11: Developing reactive APIs](#Chapter11)
 12. [Chapter 12: Persisting data reactively](#Chapter12)
+13. [Chapter 13: Discovering services](#Chapter13)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -2353,3 +2354,163 @@ public ReactiveUserDetailsService userDetailsService(UserRepository userRepo) {
 
 
 ## Chapter 12: Persisting data reactively<a name="Chapter12"></a>
+### Understanding Spring Data’s reactive story
+For now, there’s no support for working with relational databases reactively because that would require that the databases 
+and JDBC drivers involved also support non-blocking reactive models.
+
+#### Spring Data reactive distilled
+Spring Data’s reactive can be summed up by saying that reactive repositories have methods that accept and return Mono and 
+Flux instead of domain entities and collections, like `Flux<Ingredient> findByType(Ingredient.Type type);`. Analogous, a 
+save method would accept a Publisher like in: `<Taco> Flux<Taco> saveAll(Publisher<Taco> tacoPublisher);`.
+
+#### Converting between reactive and non-reactive types
+Although the full benefit of reactive programming comes when you have a reactive model from end to end, including at the 
+database level, there’s still some benefit to be had by using reactive flows on top of a non-reactive database. For 
+example, you can convert the non-reactive collection into a Flux as soon as you receive it, so that you can deal with the 
+results reactively from there on `Flux.fromIterable(repo.findByUser(someUser));` (or `Mono.just(repo.findById(id));`).
+Likewise, from reactive to non reactive, you can call _toIterable()_ on Flux, and _block()_ on Mono.
+
+#### Developing reactive repositories
+Built on top of their non-reactive repository support, Spring Data Cassandra and Spring Data MongoDB both support a 
+reactive model.
+
+### Working with reactive Cassandra repositories
+Cassandra is a distributed, high-performance, always available, eventually consistent, partitioned-row-store, NoSQL database.
+
+#### Enabling Spring Data Cassandra
+If you aren’t planning to write reactive repositories for Cassandra, you can use the following dependency in your build:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-cassandra</artifactId>
+</dependency>
+```
+
+The starter dependency that enables reactive Cassandra repositories is:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-cassandra-reactive </artifactId>
+</dependency>
+```
+
+At this point, you’ll probably want to remove the Spring Data JPA starter dependency or any relational database dependencies.
+When Cassandra libraries are in the runtime classpath, autoconfiguration for creating reactive Cassandra libraries is 
+triggered. But you’ll need to provide a small amount of configuration like the name of a key space (a grouping of tables 
+in a Cassandra node) within which your repositories will operate. Using the Cassandra CQL (Cassandra Query Language) 
+shell, you can create a key space like this: 
+`create keyspace tacocloud with replication={'class':'SimpleStrategy', 'replication_factor':1} and durable_writes=true;`
+Use SimpleStrategy for single node clusters, and NetworkTopologyStrategy for multi-node clusters. With a created key space, 
+you need to configure the `spring.data.cassandra.keyspace-name` property to tell Spring Data Cassandra to use that key space:
+
+```yaml
+spring:
+  data:
+    cassandrakeyspace-name: tacocloud 
+    schema-action: recreate-drop-unused #tables and user-defined types will be dropped and recreated on application start
+```
+
+By default, cassandra assumes the server runs in localhost:9092, use `spring.data.cassandra.contact-points` (contact point
+ is the host where a Cassandra node is running) and `spring.data.cassandra.port` to define this settings. To define 
+ username and password use `spring.data.cassandra.username` and `spring.data.cassandra.password` properties.
+ 
+#### Understanding Cassandra data modeling
+Cassandra data modeling is different from how you might model your data for persistence in a relational database:
+
+    * Cassandra tables may have any number of columns, but not all rows will necessarily use all of those columns
+    * Cassandra databases are split across multiple partitions. Any row in a given table may be managed by one or more 
+    partitions, but it’s unlikely that all partitions will have all rows
+    * A Cassandra table has two kinds of keys: partition keys and clustering keys. Hash operations are performed on each 
+    row’s partition key to determine which partition(s) that row will be managed by. Clustering keys determine the order 
+    in which the rows are maintained within a partition
+    * Cassandra is highly optimized for read operations. As such, it’s common and desirable for tables to be highly 
+    denormalized and for data to be duplicated across multiple tables
+
+#### Mapping domain types for Cassandra persistence
+Spring Data Cassandra provides its own set of mapping annotations for a similar purpose. Although it’s not required, 
+properties that hold a generated ID value are commonly of type UUID. _@PrimaryKeyColumn_ with a type of 
+_PrimaryKeyType.PARTITIONED_ specifies that the id property serves as the partition key, if we use instead the 
+_PrimaryKeyType.CLUSTERED_ is used to determine the ordering of rows within a partition.
+Cassandra tables are highly denormalized and may contain data that’s duplicated from other tables. Columns that contain 
+collections of data, must be collections of native types (integers, strings, and so on) or must be collections of 
+user-defined types. User-defined types enable you to declare table columns that are richer than simple native types. Often
+they’re used as a denormalized analog for relational foreign keys, they are marked with the _@UserDefinedType_ annotation.
+You can’t use the a class as a user-defined type if the _@Table_ annotation has already mapped it as an entity for 
+persistence in Cassandra. You must create a new class to define how the dependant entity will be stored in the column 
+mapping the collection in the entity that owns the relation. 
+
+#### Writing reactive Cassandra repositories
+When it comes to writing reactive Cassandra repositories, you have the choice of two base interfaces: 
+_ReactiveCassandraRepository_ and _ReactiveCrudRepository_.  _ReactiveCassandraRepository_ extends _ReactiveCrudRepository_ 
+to offer a few variations of an insert() method, if you’ll be inserting a lot of data, you might choose 
+_ReactiveCassandraRepository_ otherwise, it’s better to stick with _ReactiveCrudRepository_. If you don't want to have 
+reactive repositories, simply extend _CrudRepository_ or _CassandraRepository_ interfaces.
+In Cassandra, filtering results with a where clause could potentially slow down an otherwise fast query, the 
+_@AllowFiltering_ annotation makes it possible to filter the results, acting as an opt-in for those cases where it’s needed. 
+This alerts Cassandra that you’re aware of the potential impacts to the query’s performance and that you need it anyway. 
+
+### Writing reactive MongoDB repositories
+MongoDB stores documents in BSON (Binary JSON) format, which can be queried for and retrieved in a way that’s similar to 
+how you might query for data in any other database.
+
+#### Enabling Spring Data MongoDB
+The Spring starter dependency for non-reactive MongoDB is the following:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-mongodb</artifactId>
+</dependency>
+```
+
+The dependency for reactive Spring Data MongoDB starter dependency is:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-mongodb-reactive</artifactId>
+</dependency>
+```
+
+Spring Data MongoDB assumes that you have a MongoDB server run- ning locally and listening on port 27017. To work with an 
+embedded MongoDB you need to add the following dependency:
+
+```xml
+<dependency>
+    <groupId>de.flapdoodle.embed</groupId>
+    <artifactId>de.flapdoodle.embed.mongo</artifactId>
+</dependency>
+```
+
+With this configuration, all data will be wiped clean when you restart the application. Some interesting properties to 
+configure MongoDB in Spring:
+
+    * spring.data.mongodb.host: The hostname where Mongo is running (default: localhost)
+    * spring.data.mongodb.port: The port that the Mongo server is listening on (default: 27017)
+    * spring.data.mongodb.username: The username to use to access a secured Mongo database
+    * spring.data.mongodb.password: The password to use to access a secured Mongo database
+    * spring.data.mongodb.database: The database name (default: test)
+    
+#### Mapping domain types to documents
+Spring Data MongoDB offers a handful of annotations, the most important for common use cases are:
+
+    * @Id (required): Designates a property as the document ID (from Spring Data Commons)
+    * @Document (required): Declares a domain type as a document to be persisted to MongoDB
+    * @Field: Specifies the field name (and optionally the order) for storing a property in the persisted document. 
+    Properties that aren’t annotated with @Field will assume a field name equal to the property name
+
+By default, the collection name (the Mongo analog to a relational database table) is based on the class name, with the 
+first letter lowercased, but you can change that by setting the collection attribute of _@Document_. If you choose to use 
+a String property as the ID, you get the benefit of Mongo automatically assigning a value to it when it’s saved.
+
+#### Writing reactive MongoDB repository interfaces
+When it comes to writing reactive repositories for MongoDB, you have a choice between _ReactiveCrudRepository_ and 
+_ReactiveMongoRepository_,  use _CrudRepository_ or _MongoRepository_ for non reactive repositories. The key difference is 
+that _ReactiveMongoRepository_ provides a handful of special `insert()` methods optimized for persisting new documents.
+One of the benefits of extending _ReactiveCrudRepository_ it’s more portable across various database types and works equally
+ well for MongoDB as for Cassandra. _ReactiveMongoRepository_ it’s specific to MongoDB and not portable to other databases.
+ 
+
+## Chapter 13: Discovering services<a name="Chapter13"></a>

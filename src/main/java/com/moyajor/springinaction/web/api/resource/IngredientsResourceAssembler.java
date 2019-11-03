@@ -1,5 +1,5 @@
 package com.moyajor.springinaction.web.api.resource;
-import com.moyajor.springinaction.model.Ingredient;
+import com.moyajor.springinaction.model.db.Ingredient;
 import org.springframework.hateoas.mvc.ResourceAssemblerSupport;
 
 class IngredientsResourceAssembler extends ResourceAssemblerSupport<Ingredient, IngredientResource> {

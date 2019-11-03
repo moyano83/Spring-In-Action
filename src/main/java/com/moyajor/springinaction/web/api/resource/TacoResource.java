@@ -1,6 +1,6 @@
 package com.moyajor.springinaction.web.api.resource;
 
-import com.moyajor.springinaction.model.Taco;
+import com.moyajor.springinaction.model.db.Taco;
 import lombok.Getter;
 import org.springframework.hateoas.ResourceSupport;
 

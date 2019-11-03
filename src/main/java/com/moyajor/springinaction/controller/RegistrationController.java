@@ -2,7 +2,7 @@ package com.moyajor.springinaction.controller;
 
 
 import com.moyajor.springinaction.data.UserRepository;
-import com.moyajor.springinaction.model.RegistrationForm;
+import com.moyajor.springinaction.model.db.RegistrationForm;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;

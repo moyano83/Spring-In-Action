@@ -2,10 +2,10 @@ package com.moyajor.springinaction.controller;
 
 import com.moyajor.springinaction.data.IngredientRepository;
 import com.moyajor.springinaction.data.TacoRepository;
-import com.moyajor.springinaction.model.Ingredient;
-import com.moyajor.springinaction.model.Ingredient.Type;
-import com.moyajor.springinaction.model.Order;
-import com.moyajor.springinaction.model.Taco;
+import com.moyajor.springinaction.model.db.Ingredient;
+import com.moyajor.springinaction.model.db.Ingredient.Type;
+import com.moyajor.springinaction.model.db.Order;
+import com.moyajor.springinaction.model.db.Taco;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;

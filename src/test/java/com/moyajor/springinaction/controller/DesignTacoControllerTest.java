@@ -1,8 +1,8 @@
 package com.moyajor.springinaction.controller;
 
 import com.moyajor.springinaction.data.TacoRepository;
-import com.moyajor.springinaction.model.Ingredient;
-import com.moyajor.springinaction.model.Taco;
+import com.moyajor.springinaction.model.db.Ingredient;
+import com.moyajor.springinaction.model.db.Taco;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.springframework.http.MediaType;
