@@ -14,6 +14,7 @@
 11. [Chapter 11: Developing reactive APIs](#Chapter11)
 12. [Chapter 12: Persisting data reactively](#Chapter12)
 13. [Chapter 13: Discovering services](#Chapter13)
+14. [Chapter 14: Managing configuration](#Chapter14)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -2514,3 +2515,151 @@ One of the benefits of extending _ReactiveCrudRepository_ it’s more portable a
  
 
 ## Chapter 13: Discovering services<a name="Chapter13"></a>
+### Thinking in microservices
+Monolithic applications are deceptively simple, but they present a few challenges:
+
+    * The bigger the codebase gets, the harder it is to comprehend each component’s role in the whole application
+    * More difficult to test
+    * More prone to library conflicts
+    * Scale inefficiently, you must deploy the entire application to more servers
+    * Technology decisions for a monolith are made for the entire monolith
+    * Monoliths require a great deal of ceremony to get to production
+    
+Microservice architecture is a way of factoring an application into small scale, miniature applications that are
+independently developed and deployed. Microservices coordinate with each other to provide the functionality of a greater 
+application providing:
+
+    * They can be easily understood. Each microservice has a small, finite contract with other microservices
+    * They are easier to test—The smaller something is, the easier it is to test.
+    * They are unlikely to suffer from library incompatibilities because each has its own set of build dependencies
+    * They scale independently
+    * Technology choices can be made differently for each microservice
+    * Microservices can be published to production more frequently, each one can be deployed independently
+    
+### Setting up a service registry
+Eureka is the Netflix service registry (open source portfolio with a Spring twist).
+
+##### The naked truth concerning eureka
+Eureka acts as a central registry for all services in a microservice application. Eureka is a microservice whose purpose 
+is to help the other services discover each other, it’s probably best to set up a Eureka service registry before creating 
+any of the services that register with it. Other services queries eureka to get addresses, and spread the load by using 
+Ribbon, which is a client-side load balancer that makes the choice on who to route the request to on behalf of the service. 
+
+##### Why a client-side load balancer?
+Ribbon has several benefits over a centralized load balancer. Because there’s one load balancer local to each client, the
+ load balancer naturally scales proportional to the number of clients. Each load balancer can be configured to employ a 
+ load-balancing algorithm best suited for each client.
+To get started with Spring Cloud and Eureka, you’ll need to create a brand new project for the Eureka server itself. 
+There’s only one dependency you’ll need: 
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+</dependency>
+```
+
+In addition to this, a property _spring-cloud.version_ is defined along with a _<dependency-Management>_ section in the 
+pom.xml file that specifies the Spring Cloud release train version.  To enable eureka server, annotate the main 
+bootstrap class in the eureka project with _@EnableEurekaServer_, and that's it. Start it to get the eureka server running
+ in port 8080.
+ 
+#### Configuring Eureka
+Eureka’s default behavior is to attempt to fetch the service registry from other Eureka servers and even register itself 
+as a service with other Eureka servers. For development purposes, we might want to have a single eureka server which we 
+need to configure:
+
+    * set eureka.instance.hostname property to localhost
+    * set eureka.client.fetch-registry to false so eureka doesn't try to fetch the register in other eureka instances
+    * set eureka.client.register-with-eureka to false so eureka doesn't try to register in other eureka instances
+    * set eureka.client.service-url, this property contains a map of zone names to one or more URLs of Eureka servers in 
+    that zone
+    * set server.port to override the default eureka server port
+    * set eureka.server.enable-self-preservation to false, if Eureka doesn’t receive a renewal from a service for three 
+    renewal periods (or 90 s), it deregisters that instance.
+    
+#### Scaling Eureka
+You'd probably want to have at least two Eureka instances for high-availability purposes when you take the application to 
+production. Spring Cloud Services offers a production-ready implementation of Eureka, the marketplace names for the 
+configuration server and the circuit breaker dashboard are p-config-server and p-circuit-breaker-dashboard.
+The easiest, most straightforward way to configure two (or more) Eureka instances is to use Spring profiles in the 
+application.yml file and then start the Eureka server twice, once for each profile.
+
+### Registering and discovering services
+To enable an application as a service registry client, you must add the Eureka client dependency to the application’s pom:
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+</dependency>
+```
+
+You’ll also need the Spring Cloud ver- sion property set for Spring Cloud’s dependency management: 
+
+```xml
+<properties> ...
+    <spring-cloud.version>Finchley.SR1</spring-cloud.version>
+</properties>
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-dependencies</artifactId>
+            <version>${spring-cloud.version}</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+When the application starts, it attempts to contact a Eureka server running locally and listening on port 8761 to register 
+itself under the name _UNKNOWN_.
+
+#### Configuring Eureka client properties
+To change the name under which the service is registered in Eureka, set the _spring.application.name_ property. Multiple 
+instances of the same service will appear under the same name. All Spring MVC and Spring WebFlux applications are 
+listening on port 8080 by default, set the property _server.port_ to 0 which results in the application starting on a 
+randomly chosen available port. To instruct your application how to find the eureka service registry, set the property
+_eureka.client.service-url_ (http://<hostname>:<port>/eureka), multiple servers can be put, separated by coma.
+
+#### Consuming services
+Two ways to consume a service looked up from Eureka include a load-balanced RestTemplate and feign-generated client 
+interfaces.
+
+##### Consuming services with RestTemplate
+A normal call to an url with rest template would look like: 
+`rest.getForObject("http://localhost:8080/ingredients/{id}", Ingredient.class, ingredientId)`, to avoid hardcoding urls, 
+you can annotate the method containing this call with _@LoadBalanced_, which tells Spring Cloud that this RestTemplate 
+should be instrumented with the ability to look up services through Ribbon and acts as an injection qualifier, so that if 
+you have two or more RestTemplate beans, you can specify that you want the load-balanced RestTemplate at the injection point.
+The previous method would look like this using the load balancer:
+`rest.getForObject("http://ingredient-service/ingredients/{id}", Ingredient.class, ingredientId)`, where instead of 
+harcoding hostnames and ports, a service name is being used (RestTemplate would ask Ribbon for the specific instance).
+
+##### Consuming services with WebClient
+WebClient is the reactive counterpart of RestTemplate. As with the later, use _@LoadBalanced_ on the method returning the 
+WebClient builder, and add it as well on to qualify the WebClientBuilder argument in the constructor of your components. When
+ you need to use the WebClient, call the `webClientBuilder.build()` method.
+ 
+##### Defining feign client interfaces
+Feign (originally a Netflix project) is a REST client library that applies a unique, interface-driven approach to 
+defining REST clients. To use Feign, add the following to your pom:
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-openfeign</artifactId>
+</dependency>
+```
+
+There’s no autoconfiguration to enable Feign, so you’ll need to add the _@EnableFeignClients_ annotation to one of the 
+configuration classes. With this, you can define interfaces with the same signature that the controllers they access, and 
+Feign will include an implementation of the interface in the spring context. These interfaces needs to be annotated with 
+_@FeignClient("theServiceName")_. Internally, this service will be looked up via Ribbon, the same way as it worked for the
+load-balanced RestTemplate. Feign comes with its own set of annotations. _@RequestLine_ and _@Param_ are roughly 
+analogous to Spring MVC’s _@RequestMapping_ and _@PathVariable_ but their use is slightly different. 
+
+
+## Chapter 14: Managing Configuration<a name="Chapter14"></a>
