@@ -16,6 +16,7 @@
 13. [Chapter 13: Discovering services](#Chapter13)
 14. [Chapter 14: Managing configuration](#Chapter14)
 15. [Chapter 15: Handling failure and latency](#Chapter15)
+16. [Chapter 16: Working with Spring Boot Actuator](#Chapter16)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -2937,3 +2938,141 @@ With the appropriate Spring Cloud Bus starter in place, add the appropriate conf
  
 
 ## Chapter 15: Handling failure and latency<a name="Chapter15"></a>
+### Understanding circuit breakers
+The circuit breaker pattern is important in the context of microservices, to avoid letting failures cascade across a
+distributed call stack. A software circuit breaker starts in a closed state, allowing invocations of a method. If that
+method fails, the circuit opens and invocations are no longer performed against the failing method. A software circuit
+breaker provides fallback behavior and is self-correcting. Every so often, invocations to the original method are permitted, 
+if it succeeds, then it’s assumed that the problem has been resolved and the circuit returns to a closed state. 
+The following categories of methods are candidates for circuit breakers:
+
+    * REST calls which could fail due to the remote service being unavailable or returning HTTP 500 responses
+    * Methods that perform database queries
+    * Methods that are potentially slow
+    
+
+Netflix Hystrix is a Java implementation of the circuit breaker pattern. Hystrix circuit breaker is implemented as an aspect 
+applied to a method that triggers a fallback method if the target method fail. The aspect also tracks how frequently the
+ target method fails and forwards all requests to the fallback if the failure rate exceeds some threshold.
+To declare a circuit breaker in a method, annotate it with  _@HystrixCommand_ and provide a fallback method.
+
+### Declaring circuit breakers
+To add the Spring Cloud Netflix Hystrix starter to the build include the following dependency:
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
+</dependency>
+```
+
+You’ll also need to declare dependency management for the Spring Cloud release train in your build:
+
+```xml
+<properties>
+    <spring-cloud.version>Finchley.SR1</spring-cloud.version>
+</properties>
+
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-dependencies</artifactId>
+            <version>${spring-cloud.version}</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+``` 
+
+The next thing you’ll need to do is to enable Hystrix by adding _@EnableHystrix_ to each application’s main class. Then
+you need to add the _@HystrixCommand(fallbackMethod="nameOfTheFallbackMethod")_ to your method, the method indicated in the 
+_fallbackMethod_ parameter needs to have the same signature than the original method. The fallback method can as well be
+ annotated so it has another fallback method.
+ 
+#### Mitigating latency
+By default, all methods annotated with @HystrixCommand time out after 1 second, but you can change it by specifying a
+Hystrix command property in the _commandProperties_ attribute of the _@HystrixCommand_ annotation, which accepts an array
+of _@HystrixProperty(name=XXX, value=YYY)_. To change the timeout set the _execution.isolation.thread.timeoutInMilliseconds_
+property, to dissable it completely, set the _execution.timeout.enabled_ property to false.
+
+#### Managing circuit breaker thresholds
+By default, if a circuit breaker protected method is invoked over 20 times, and more than 50% of those invocations fail
+over a period of 10 seconds, the circuit will be thrown into an open state. After 5 seconds, the circuit will enter a
+half-open state, allowing some requests to pass. To tweak the failure and retry thresholds modify the following:
+
+    * circuitBreaker.requestVolumeThreshold: The number of times a method should be called within a given time period
+    * circuitBreaker.errorThresholdPercentage: A percentage of failed method invocations within a given time period
+    * metrics.rollingStats.timeInMilliseconds: A rolling time period for which the request volume and error percentage are
+     considered
+    * circuitBreaker.sleepWindowInMilliseconds: How long an open circuit remains open before entering a half-open state
+    
+### Monitoring failures
+Hystrix also publishes a stream of metrics for each circuit breaker in an application. Among the data collected for each
+ circuit breaker, the Hystrix stream includes the following:
+ 
+    * Number of times the method is called
+    * Number of times it’s called successfully
+    * Number of times the fallback method is called
+    * Number of times the method times out
+    
+The Hystrix stream is provided by an Actuator endpoint, to add the Actuator dependency in your project include:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+The Hystrix stream endpoint is exposed at the path _/actuator/hystrix.stream_. By default, most of the Actuator endpoints are
+disabled. To enable the Hystrix stream endpoint add following configuration in each application application.yml file:
+`management.endpoints.web.exposure.include: hystrix.stream`
+Application startup exposes the Hystrix stream, which can then be consumed using any REST client you want.
+
+#### Introducing the Hystrix dashboard
+To use the Hystrix dashboard, you first need to create a new Spring Boot application with a dependency on the Hystrix
+ dashboard starter:
+ 
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-hystrix-dashboard</artifactId>
+</dependency>
+```
+
+You also need to enable the Hystrix dashboard by annotating the main configuration class with _@EnableHystrixDashboard_. 
+Once it’s running, open your web browser to _http://localhost:<configuredPort>/hystrix_. To start viewing a Hystrix stream, 
+enter the URL for one of the service application Hystrix streams into the text box that will appear (i.e. if the
+application runs on localhost port 8081, the enter _localhost:8081/actuator/hystrix.stream_ into the text box). Each
+circuit breaker can be viewed as a graph along with some other useful metrics data.
+
+#### Understanding Hystrix thread pools
+Hystrix assigns a thread pool for each dependency (because Hystrix blocks the calling thread, waiting for a response which
+can black the method user if it runs in the same thread than Hystrix), when one of the Hystrix command methods is called, 
+it’ll be executed in a thread from the Hystrix-managed thread pool, isolating it from the calling thread.
+As an alternative to Hystrix thread pooling, you can choose to use _semaphore isolation_ (see documentation).
+
+### Aggregating multiple Hystrix streams
+The Hystrix dashboard is only capable of monitoring a single stream at a time, but another Netflix project, Turbine, offers a
+way to aggregate all of the Hystrix streams from all the microservices into a single stream that the Hystrix dashboard
+ can monitor. To create a Turbine service, create a new Spring Boot project and include the following dependency:
+ 
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-turbine</artifactId>
+</dependency>
+```
+
+Then annotate the main configuration class of this new spring boot project with _@EnableTurbine_. Turbine works by
+consuming the streams from multiple microservices and merging the circuit breaker metrics into a single stream. It acts
+as a client of Eureka, discovering the services whose streams it’ll aggregate into its own stream, but you need to
+configure which services to aggregate. The _turbine.app-config_ property accepts a comma-delimited list of service names to
+look up in Eureka and for which it should aggregate Hystrix streams. You can instruct Turbine to collect all of the
+aggregated streams under a cluster by setting the _turbine.cluster-name-expression_ property and passing the name of the
+cluster as value. Turbine dashboard would be available at _http://localhost:<configuredPort>/turbine.stream_.
+ 
+
+## Chapter 16: Working with Spring Boot Actuator<a name="Chapter16"></a>
