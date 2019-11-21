@@ -15,12 +15,13 @@
 12. [Chapter 12: Persisting data reactively](#Chapter12)
 13. [Chapter 13: Discovering services](#Chapter13)
 14. [Chapter 14: Managing configuration](#Chapter14)
+15. [Chapter 15: Handling failure and latency](#Chapter15)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
 
 ### What is Spring?
-At its core, Spring offers a container, often referred to as the Spring application con- text, that creates and manages 
+At its core, Spring offers a container, often referred to as the Spring application context, that creates and manages 
 application components. These components, or beans, are wired together inside the Spring application context to make a 
 complete application, this is known as dependency injection (DI).
 The following Java-based configuration class creates two beans and injects one into the other:
@@ -95,7 +96,7 @@ Spring MVC application, it also sets up Spring support for testing Spring MVC.
 Spring boot comes with an embedded Tomcat server in the Spring application context.
 
 #### Getting to know Spring Boot DevTools
-As its name suggests, DevTools provides Spring developers with some handy develop- ment-time tools. Among those are
+As its name suggests, DevTools provides Spring developers with some handy development-time tools. Among those are
 
     * Automatic application restart when code changes
     * Automatic browser refresh when browser-destined resources changes (templates,JavaScript, stylesheets, and so on)
@@ -483,7 +484,7 @@ As with JDBC, we can define a password encoder (encoder should match that in the
 By default, Spring Security’s LDAP authentication assumes that the LDAP server is listening on port 33389 on localhost. To
 configure a remote server, use `.contextSource().url("ldap://yourserver:389/dc=yourapp,dc=com");`. Spring allows you to 
 define an embedded LDAP server, instead of setting the URL to a remote LDAP server, you can specify the root suffix for 
-the embed- ded server via the _root()_ method: `.contextSource().root("dc=yourapp,dc=com");`. When this LDAP server starts, 
+the embedded server via the _root()_ method: `.contextSource().root("dc=yourapp,dc=com");`. When this LDAP server starts, 
 it will attempt to load data from any LDIF files that it can find in the classpath (or use the `ldif()` method to define 
 the lookup path).
 
@@ -635,7 +636,7 @@ is slightly different to accommodate restrictions placed on environment variable
 #### Configuring a data source
 Although you could explicitly configure your own DataSource bean, that’s usually unnecessary. Spring Boot can even figure 
 it out the JDBC driver class from the structure of the database URL. The DataSource bean will be pooled using Tomcat’s 
-JDBC connection pool if it’s avail- able on the classpath. If not, Spring Boot looks for and uses one of these other 
+JDBC connection pool if it’s available on the classpath. If not, Spring Boot looks for and uses one of these other 
 connection pool implementations on the classpath (HikariCP and Commons DBCP 2). With spring boot, you can specify the 
 database initialization scripts to run when the application starts:
 
@@ -901,7 +902,7 @@ couple of ways:
     prefixed with whatever base path you want, including the Spring Data REST base path, but if the base path were to 
     change, you’d need to edit the controller’s mappings to match.
     * Any endpoints you define in your own controllers won’t be automatically included as hyperlinks in the resources 
-    returned by Spring Data REST end- points. This means that clients won’t be able to discover your custom endpoints with
+    returned by Spring Data REST endpoints. This means that clients won’t be able to discover your custom endpoints with
     a relation name.
     
 Spring Data REST includes _@RepositoryRestController_, a new annotation for annotating controller classes whose mappings 
@@ -935,7 +936,7 @@ RestTemplate provides 41 methods for interacting with REST resources. The most i
 | execute(...)  | Executes a specified HTTP method against a URL, returning an object mapped from the response body        |
 | getForEntity(...) | Sends an HTTP GET request, returning a ResponseEntity containing an object mapped from the response body |
 | getForObject(...) | Sends an HTTP GET request, returning an object mapped from a response body                           |
-| headForHeaders(...) | Sends an HTTP HEAD request, returning the HTTP headers for the speci- fied resource URL |
+| headForHeaders(...) | Sends an HTTP HEAD request, returning the HTTP headers for the specified resource URL |
 | optionsForAllow(...) | Sends an HTTP OPTIONS request, returning the Allow header for the specified URL |
 | patchForObject(...) | Sends an HTTP PATCH request, returning the resulting object mapped from the response body |
 | postForEntity(...) | POSTs data to a URL, returning a ResponseEntity containing an object mapped from the response body |
@@ -971,7 +972,7 @@ public Ingredient getIngredientById(String ingredientId) {
 
 It’s important to know that the variable param- eters are assigned to the placeholders in the order that they’re given.
 _getForEntity()_ works in much the same way as _getForObject()_, but instead of returning a domain object that represents the
- response’s payload, it returns a Response- Entity object that wraps that domain object.
+ response’s payload, it returns a ResponseEntity object that wraps that domain object.
 
 #### PUTting resources
 All three overloaded variants of put() accept an Object that is to be serialized and sent to the given URL. As for the URL
@@ -1608,11 +1609,11 @@ Spring Integration provides several channel implementations, including:
     If there are multiple consumers, all of them receive the message
     * QueueChannel: Messages published into a QueueChannel are stored in a queue until pulled by a consumer in a first in, 
     first out (FIFO) fashion. If there are multiple consumers, only one of them receives the message
-    * PriorityChannel: Like QueueChannel but, rather than FIFO behavior, mes- sages are pulled by consumers based on the 
+    * PriorityChannel: Like QueueChannel but, rather than FIFO behavior, messages are pulled by consumers based on the 
     message priority header.
     * RendezvousChannel: Like QueueChannel except that the sender blocks the channel until a consumer receives the message, 
     effectively synchronizing the sender with the consumer
-    * DirectChannel: Like PublishSubscribeChannel but sends a message to a sin- gle consumer by invoking the consumer in the 
+    * DirectChannel: Like PublishSubscribeChannel but sends a message to a single consumer by invoking the consumer in the 
     same thread as the sender. This allows for transactions to span across the channel
     * ExecutorChannel: Similar to DirectChannel but the message dispatch occurs via a TaskExecutor, taking place in a 
     separate thread from the sender. This channel type doesn’t support transactions that span the channel
@@ -1934,7 +1935,7 @@ As a `Subscriber`, a `Processor` will receive data and process it in some way. T
 ### Getting started with Reactor
 #### Diagramming reactive flows
 Reactive flows are often illustrated with marble diagrams, which depicts a timeline of data as it flows through a Flux (a 
-Publisher representing a pipeline of zero, one, or many -potentially infinite- data items), or Mono (a Publisher 
+Publisher representing a pipeline of zero, one, or many -potentially infinitedata items), or Mono (a Publisher 
 representing a pipeline of no more than one data items) at the top, an operation in the middle, and the timeline of the 
 resulting Flux or Mono at the bottom.
 
@@ -2070,7 +2071,7 @@ two operations results in a Mono of type Boolean.
 
 ## Chapter 11: Developing reactive APIs<a name="Chapter11"></a>
 ### Working with Spring WebFlux
-Typical Servlet-based web frameworks, such as Spring MVC, are blocking and multi- threaded in nature, using a single 
+Typical Servlet-based web frameworks, such as Spring MVC, are blocking and multithreaded in nature, using a single 
 thread per connection. Asynchronous web frameworks, in contrast, achieve higher scalability with fewer threads—generally 
 one per CPU core. By applying a technique known as event looping, these frameworks are able to handle many requests per 
 thread. In an event loop, everything is handled as an event, including requests and callbacks from intensive operations 
@@ -2164,7 +2165,7 @@ public class RouterFunctionConfig {
 }
 ```
 
-The _route()_ method from RouterFunctions accepts two parameters: a Request- Predicate and a function to handle matching 
+The _route()_ method from RouterFunctions accepts two parameters: a RequestPredicate and a function to handle matching 
 requests. The _GET()_ method from _RequestPredicates_ declares a _RequestPredicate_ that matches HTTP GET requests for the 
 /hello path. If you need to handle a different kind of request, you only need to call _andRoute()_ to declare another 
 _RequestPredicate-to-function_ mapping. For example, here’s how you might add another handler for GET requests for /bye:
@@ -2475,7 +2476,7 @@ The dependency for reactive Spring Data MongoDB starter dependency is:
 </dependency>
 ```
 
-Spring Data MongoDB assumes that you have a MongoDB server run- ning locally and listening on port 27017. To work with an 
+Spring Data MongoDB assumes that you have a MongoDB server running locally and listening on port 27017. To work with an 
 embedded MongoDB you need to add the following dependency:
 
 ```xml
@@ -2595,7 +2596,7 @@ To enable an application as a service registry client, you must add the Eureka c
 </dependency>
 ```
 
-You’ll also need the Spring Cloud ver- sion property set for Spring Cloud’s dependency management: 
+You’ll also need the Spring Cloud version property set for Spring Cloud’s dependency management: 
 
 ```xml
 <properties> ...
@@ -2663,3 +2664,276 @@ analogous to Spring MVC’s _@RequestMapping_ and _@PathVariable_ but their use 
 
 
 ## Chapter 14: Managing Configuration<a name="Chapter14"></a>
+### Sharing configuration
+In microservice-architected applications, property management is spread across multiple codebases and deployment instances, 
+making it unreasonable to apply the same change in every single instance of multiple services in a running application.
+When configuration management is centralized:
+
+    * Configuration is no longer packaged and deployed with the application code
+    * Microservices that share common configuration needn’t manage their own copy of the properties and can share common ones
+    * Sensitive configuration details can be encrypted and maintained separate from the application code
+    
+### Running Config Server
+Spring Cloud Config Server provides centralized configuration with a server that all microservices within an application
+ can rely on for their configuration. It exposes a REST API through which clients can consume configuration properties.
+This configuration is usually hosted in a source code control system such as Git.
+
+#### Enabling Config Server
+You need to create a brand new project for config server, you can do it with spring initializr or with the dependency:
+
+```xml
+<dependency> 
+    <groupId>org.springframework.cloud</groupId> 
+    <artifactId>spring-cloud-config-server</artifactId>
+</dependency>
+```
+
+The Config Server version is ultimately determined by the Spring Cloud release train that’s chosen with:
+
+```xml
+<properties>
+    <spring-cloud.version>Finchley.SR1</spring-cloud.version>
+</properties>
+
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-dependencies</artifactId>
+            <version>${spring-cloud.version}</version> <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+There’s no autoconfiguration to enable config server, so you’ll need to annotate a configuration class with
+_@EnableConfigServer_ (i.e. in the main application class). To read the properties from git, you need to define the property
+_spring.cloud.config.server.git.uri_ pointing to your repo, and override the _server.port_ property (the default port that
+the configuration clients will attempt to retrieve configuration from is 8888). Configuration can be retrieved with a
+normal GET request to _http://<hostname>:<port>/<app name>/<Active profiles>/<git branch>_.
+
+#### Populating the configuration repository
+There is several options to populate properties in the config server, from simply uploading an _application.properties_ file, 
+to git subpaths (for that you need to define the _spring.cloud.config.server.git.search-paths_ property and indicate the
+folders to look for configuration), or specific git branches (by providing the property 
+_spring.cloud.config.server.git.default-label_). If you need to provide a username and password to connect to git, the
+appropriate properties are _spring.cloud.config.server.git.username_ and _spring.cloud.config.server.git.password_.
+  
+### Consuming shared configuration
+Spring Cloud Config Server also provides a client library that, when included in a Spring Boot application’s build, enables
+ that application as a client of the Config Server:
+ 
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-config</artifactId>
+</dependency>
+```
+
+Set the _spring.cloud.config.uri_ to indicate how to access the config server, and the _spring.application.name_ to
+identify the application to the configuration server.
+In this model, the config server is directly accessible, but you might want it to register in eureka like you'll do with
+other microservices, to do so, set the _spring.cloud.config.discovery.enabled_ property to true (the config server will
+register itself in eureka with the name _configserver_).
+
+### Serving application and profile-specific properties
+The active profile(s) can be specified by setting the _spring.profiles.active_ property.
+
+#### Serving application-specific properties
+Config Server is able to manage configuration properties that are targeted to a specific application, for this, name the
+configuration file the same as the application’s _spring.application.name_ property. No matter what an application is named, 
+all applications will receive configuration properties from the application.yml file if it exists (applicationspecific 
+properties will take precedence over the general application properties).
+
+#### Serving properties from profiles
+Spring Cloud Config Server supports profile-specific properties in exactly the same way that you’d use them in an
+ individual Spring Boot application, including:
+ 
+    * Providing profile-specific .properties or YAML files, such as configuration files named application-production.yml
+    * Including multiple profile configuration groups within a single YAML file, separated with --- and spring.profiles
+    
+As before, profile specific properties take precedence on general properties in case of collision. You can also specify
+ properties that are specific to both a profile and an application using the same naming convention.
+ 
+### Keeping configuration properties secret
+Config Server offers two options for working with secret configuration properties:
+
+    * Writing encrypted values in configuration files stored in Git
+    * Using HashiCorp’s Vault as a backend store for Config Server in addition to (orin place of) Git
+
+#### Encrypting properties in Git
+To enable encrypted properties, you need to configure the Config Server with an encryption key that it will use to decrypt
+values before serving them to its client applications. Config Server supports both symmetric and asymmetric keys. To set
+a symmetric key, set the _encrypt.key_ property in the Config Server’s own configuration. This property must be set in
+bootstrap configuration so that it’s loaded and available before autoconfiguration enables the Config Server.
+To create an asymmetric key, you can use the keytool which will generate a keystore.jks file (you can keep the file of
+ ship it with the app), and configure the location of this file in the application using the following:
+ 
+ ```yaml
+encrypt:
+  key-store:
+    alias: thealias
+    location: classpath:/keystore.jks 
+    password: password
+    secret: secret
+```
+
+Config Server exposes an _/encrypt_ endpoint to help you encrypt values, you must POST your data to this endpoint and it
+will return the encrypted value. The encrypted value can now be placed in the password property field like this:
+
+```yaml
+password: '{cypher}encrypted_value' #Note the quotes and the cypher word prepending the value
+``` 
+
+By default, any encrypted values served by Config Server are only encrypted while at rest in the backend Git repository
+and would be decrypted before being served (this behaviour can be changed by setting the 
+_spring.cloud.config.server.encrypt.enabled_ property  to false, but the client must decrypt these values then).
+
+#### Storing secrets in Vault
+HashiCorp Vault is a secret-management tool which core feature is handling secret information natively.
+
+##### Starting a vault server
+After installing the vault command tools, run 
+
+```shell script
+vault server -dev -dev-root-token-id=roottoken
+export VAULT_ADDR='http://127.0.0.1:8200'
+vault status
+```
+
+This starts a Vault server in development mode with a root token whose ID is _roottoken_. All access to a Vault server
+requires that a token be presented to the server. The root token is an administrative token that allows you to create more
+tokens. The following two commands recreate the backend whose name is secret to be compatible with Config Server:
+
+```shell script
+vault secrets disable secret
+vault secrets enable -path=secret kv
+```
+
+##### Writing secrets to vault
+To write a property in vault (i.e. user1.pw) you need to execute `vault write secret/application user1.pw=s3cr3t` where
+`secret` refers to the 'secret' backend and `application` is the secret path, `user1.pw` is the secret key and `s3cr3` 
+the secret value. The secret path, much like a filesystem path, allows you to group related secrets in a given path and
+other secrets in different paths. The _secret/_ prefix to the path identifies the Vault backend—in this case a key-value
+backend named “secret”. To read a secret after it has been written use `vault read secret/application`.
+Every write to a given path will overwrite any secrets previously written to that path, which means that if you want to
+ store username/password in a path, you need to write the two properties at the same time:
+```shell script
+vault write secret/application \
+user1.password=pass \
+user1.username=user1
+```
+
+##### Enabling a vault backend in config server
+To enable vault, you need to add 'vault' under the `spring.profiles.active` property, which can be used along with the 'git'
+profile. Some of the properties you need to configure for vault are below (self descriptive):
+
+```yaml
+spring:
+  cloud:
+    config:
+      server:
+        git:
+          uri: http://localhost:10080/tacocloud/tacocloud-config 
+          order: 2
+        vault:
+          host: vault.tacocloud.com 
+          port: 8200
+          scheme: https
+          order: 1
+```
+
+The order property specifies that secrets provided by Vault will take precedence over any properties provided by Git. It’s
+important that all requests to Vault include an _X-Vault-Token_ header in the request. Rather than configure that token in
+the Config Server itself, each Config Server client will need to include the token in an X-Config-Token header in all
+requests to the Config Server (this value is the roottoken indicated before).
+
+#### Setting the vault token in config server clients
+You need to add the _spring.cloud.config.token_ property with the token value in the config of each of the client
+applications, which tells the Config Server client to include the given token value in all requests it makes to the
+Config Server.
+
+##### Writing application and profile-specific secrets
+If you need to write secrets that are specific to a given application, replace the application portion of the path with
+the application name. To add secrets specific to a profile, add the profile after the application portion of the path, 
+prepended by comma.
+
+### Refreshing configuration properties on the fly
+Spring Cloud Config Server supports the ability to refresh configuration properties of running applications without downtime.
+For that we have two options:
+
+    * Manual: The Config Server client enables a special Actuator endpoint at /actuator/refresh
+    * Automatic: A commit hook in the Git repository can trigger a refresh on services that are clients of the Config Server
+    
+#### Manually refreshing configuration properties
+Whenever you enable an application to be a client of the Config Server, the auto-configuration in play also configures a
+ special Actuator endpoint for refreshing configuration properties. You need to include the following dependency:
+ 
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+Spring will make available an endpoint at _/actuator/refresh_ to reload the config properties (via POST request). When
+ called, it will return a json with the property names that has changed.
+ 
+#### Automatically refreshing configuration properties
+Config Server can automatically notify all clients of changes to configuration by way of another Spring Cloud project
+ called Spring Cloud Bus. The property refresh process can be summarized like this:
+
+    * A webhook is created on the configuration Git repository to notify Config Server of any changes on git
+    * Config Server reacts to webhook POST requests by broadcasting a message to a message broker, such as RabbitMQ or Kafka
+    * Client applications subscribed to the notifications react to the notification messages by refreshing their environments
+    
+In order to get this working, you need to:
+
+    * You need a message broker available to handle the messaging between Config Server and its clients
+    * A webhook will need to be created in the backend Git repository to notify Config Server of any changes
+    * Config Server will need to be enabled with the Config Server monitor dependency and the JMS dependency
+    * You need to configure the details for connecting to the broker in both the Config Server and in all of its clients
+    * Each Config Server client application will need the Spring Cloud Bus dependency
+    
+##### Creating a webhook
+Setting webhooks in git is specific to the flavour used, so check the documentation. It is important that the URL set
+ points to the config server _/monitor_ path. Content type should be 'application/json'.
+
+##### Handling webhook updates in config server
+To enable the /monitor endpoint in Config Server you need to add the following dependency:
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-config-monitor</artifactId>
+</dependency>
+```
+
+To enable broadcasting of notifications, you also need to add the Spring Cloud Stream dependency. To avoid being hardcoded
+to any particular messaging implementation, the monitor acts as a Spring Cloud Stream source, publishing messages into
+the stream and letting the underlying binding mechanism deal with the specifics of sending the messages. Add:
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-stream-XXX</artifactId> <!-- Where XXX here can be rabbit, kafka... -->
+</dependency>
+```
+
+After this, add the appropriate configuration to connect to the underlying binding platform.
+
+##### Enabling auto-refresh in config server clients
+To enable automatic refresh on config server clients, add:
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-bus-XXX</artifactId> <!-- Where XXX here can be rabbit, kafka... -->
+</dependency>
+```
+With the appropriate Spring Cloud Bus starter in place, add the appropriate configuration to connect to the underlying
+ binding platform and autoconfiguration will kick in as the application starts up.
+ 
+
+## Chapter 15: Handling failure and latency<a name="Chapter15"></a>
