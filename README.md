@@ -17,6 +17,7 @@
 14. [Chapter 14: Managing configuration](#Chapter14)
 15. [Chapter 15: Handling failure and latency](#Chapter15)
 16. [Chapter 16: Working with Spring Boot Actuator](#Chapter16)
+17. [Chapter 17: Administering Spring](#Chapter17)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -3076,3 +3077,250 @@ cluster as value. Turbine dashboard would be available at _http://localhost:<con
  
 
 ## Chapter 16: Working with Spring Boot Actuator<a name="Chapter16"></a>
+### Introducing Actuator
+Using endpoints exposed by Actuator, we can ask things about the internal state of a running Spring Boot application, add:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+Adding this dependency to your project enables several endpoints (check docs).
+
+#### Configuring Actuator’s base path
+By default, the paths for all the endpoints shown in table 16.1 are prefixed with _/actuator_, but this can be changed
+ with the _management.endpoint.web.base-path_ property.
+ 
+#### Enabling and disabling Actuator endpoints
+Actuator enables endpoints with potentially sensitive information, using _management.endpoints.web.exposure.include_, you
+can specify which endpoints you want to expose (accepts asterisks). If you want to expose all but a few endpoints, it’s
+typically easier to include them all with a wildcard and then explicitly exclude a few. Use 
+_management.endpoints.web.exposure.exclude_ to specify which endpoints to exclude.
+
+### Consuming Actuator endpoints
+A GET request to Actua- tor’s base path will provide HATEOAS links for each of the endpoints.
+
+#### Fetching essential application information
+The _/info_ endpoint tells you a little about the application, and the _/health_ endpoint tells you how healthy the
+application is. You can think that the _/info_ endpoint is a clean canvas on which you may paint any information you’d
+like to present. There are several ways to supply information for the _/info_ endpoint to return, but the most
+straightforward way is to create one or more configuration properties where the property name is prefixed with 'info.'.
+Calling _/health_ results in a simple JSON response with the health status of your application which is an aggregate
+status of one or more health indicators (health of external systems that the application interacts with, such as
+databases, message brokers, and even Spring Cloud components such as Eureka and the Config Server). The status can be:
+
+     * UP: The external system is up and is reachable
+     * DOWN: The external system is down or unreachable
+     * UNKNOWN: The status of the external system is unclear
+     * OUT_OF_SERVICE: The external system is reachable but is currently unavailable
+
+The health statuses of all health indicators are aggregated into the application’s overall health status with this rules:
+    
+    * If all health indicators are UP, then the application health status is UP
+    * If one or more health indicators are DOWN, then the application health status is DOWN
+    * If one or more health indicators are OUT_OF_SERVICE, then the application health status is OUT_OF_SERVICE
+    * UNKNOWN health statuses are ignored and aren’t rolled into the application’s aggregate health
+    
+By default, only the aggregate status is returned in response to a request for /health (value 'never'). You can configure the 
+_management.endpoint.health.show-details_ property to show the full details of all health indicators (set it to 'always').
+
+#### Viewing configuration details
+##### Getting a bean wiring report
+The _/beans_ endpoint returns a JSON document describing every single bean in the application context, its Java type, and any
+ of the other beans it’s injected with.
+
+##### Explaining autoconfiguration
+You may sometimes wonder why something has been autoconfigured, you can make a GET request to _/conditions_ to get an
+explanation of what took place in autoconfiguration. The autoconfiguration report returned from _/conditions_ is divided
+into three parts: positive matches (conditional configuration that passed), negative matches (conditional configuration
+that failed), and unconditional classes.
+
+##### Inspecting the environment and configuration properties
+If you want to see what environment properties are available and what configuration properties were injected on the beans, 
+you can use the _/env_ endpoint and see all properties from all property sources in play in the Spring application. The 
+_/env_ endpoint can also be used to fetch a specific property when that property’s name is given as the second element of
+the path. By submitting a POST request to the this endpoint, along with a JSON document with a name and value field, you
+can also set properties in the running application (DELTETE works as well).
+
+##### Navigating HTTP request mappings
+To get a big-picture understanding of all the kinds of HTTP requests that an application can handle, issue a GET request to
+_/mappings_.
+
+##### Managing logging levels
+If you are wondering what logging levels are set in your running Spring Boot application, you can issue a GET request to the 
+_/loggers_ endpoint, the complete response will include logging-level entries for every single package in the application, 
+including those for libraries that are in use. If you’d rather focus your request on a specific package, you can specify
+the package name as an extra path component in the request.
+The /loggers endpoint also allows you to change the configured logging level by issuing a POST request like this:
+
+```bash
+curl localhost:8081/actuator/loggers/tacos/ingredients  -d'{"configuredLevel":"DEBUG"}' -H"Content-type: application/json"
+```
+
+#### Viewing application activity
+It can be useful to keep an eye on activity in a running application, including the kinds of HTTP requests that the
+application is handling and the activity of all of the threads in the application. For this, Actuator provides the
+_/httptrace_, _/threaddump_, and _/heapdump_ endpoints.
+
+##### Tracing HTTP activity
+The /httptrace endpoint reports details on the most recent 100 requests handled by an application, including are the
+request method and path, a timestamp indicating when the request was handled, headers from both the request and the
+response, and the time taken handling the request.
+
+##### Monitoring threads
+The _/threaddump_ endpoint produces a snapshot of current thread activity (provides a snapshot of thread activity at the
+ time it was requested).
+
+#### Tapping runtime metrics 
+The _/metrics_ endpoint is capable of reporting all manner of metrics produced by a running application, including metrics
+concerning memory, processor, garbage collection, and HTTP requests. If instead of simply requesting _/metrics_, you were
+to issue a GET request for _/metrics/{METRICS CATEGORY}_, you’d receive more detail about the metrics for that category.
+You can narrow down the results further by using the tags listed under _availableTags_. For example, to get metrics of all
+ request that were 404 do `curl localhost:8081/actuator/metrics/http.server.requests?tag=status:404`.
+
+### Customizing Actuator
+#### Contributing information to the /info endpoint
+Spring Boot offers an interface named _InfoContributor_ that allows you to programmatically add any information you want to
+the _/info_ endpoint response. 
+
+##### Creating a custom info contributor
+Imagine you want to add some stats about a controller usage in the _/info_ endpoint, for that you can write a class that
+ implements _InfoContributor_ interface and override the _contribute_ method like this:
+ 
+```java
+public void contribute(Builder builder) {
+    Map<String, Object> infoMap = new HashMap<String, Object>(){{ 
+        put("count", something.count());
+    }} 
+    builder.withDetail("taco-stats", infoMap);
+}
+```
+
+##### Injecting build information into the /info endpoint
+Spring Boot comes with a few built-in implementations of InfoContributor that automatically add information to the
+results of the _/info_ endpoint like _BuildInfoContributor_, which adds information from the project build file into the
+_/info_ endpoint results (includes basic information such as the project version, the time- stamp of the build, and the
+ host and user who performed the build).
+To enable build information to be included in the results of the /info endpoint,
+add the build-info goal to the Spring Boot Maven Plugin executions, as follows:
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+            <executions>
+                <execution>
+                    <goals>
+                        <goal>build-info</goal>
+                    </goals>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
+</build>
+```
+
+##### Exposing git commit information
+To add git commit info into the _/info_ endpoint, you need to add this to your maven file:
+
+```xml
+<build>
+  <plugins>
+        <plugin>
+            <groupId>pl.project13.maven</groupId>
+            <artifactId>git-commit-id-plugin</artifactId>
+        </plugin>
+    </plugins>
+</build>
+```
+
+In its simplest form, the Git information presented in the _/info_ endpoint includes the Git branch, commit hash, and
+timestamp that the application was built against.
+
+#### Defining custom health indicators
+To create a custom health indicator, all you need to do is create a bean that implements the _HealthIndicator_ interface:
+
+```java
+@Override
+public Health health() {
+    if (someCondition) {
+        return Health.down().withDetail("reason", "Broken") .build();
+    }else{
+        return Health.up().withDetail("reason", "All is good!") .build();
+    }
+}
+```
+
+#### Registering custom metrics
+Actuator metrics are implemented by [Micrometer](https://micrometer.io), a vendor-neutral metrics facade that makes it
+possible for applications to publish any metrics they want and to display them in the third-party monitoring system of
+their choice, including support for Prometheus, Datadog, and New Relic, among others. In a Spring Boot application, all
+you need to do to publish metrics is to inject a _MeterRegistry_ wherever you may need to publish counters, timers, or
+gauges that capture the metrics for your application. For example to increment the value of a counter:
+
+```java
+meterRegistry.counter("counterName","metricName", theValue).increment();
+```
+
+When consuming the rest endpoint, you can query the values using tags like 
+`curl localhost:8087/actuator/metrics/app?tag=metricName:SomeValue`.
+
+#### Creating custom endpoints
+The Actuator endpoints are exposed also as JMX MBeans as well as through HTTP requests. Actuator endpoints are annotated
+with _@Endpoint_ and its methods are annotated with _@ReadOperation_, _@WriteOperation_, and _@DeleteOperation_:
+
+    * @ReadOperation: In HTTP terms, this means it will handle an HTTP GET request
+    * @WriteOperation: In HTTP terms, is a POST request where the body of the request is a JSON object
+    * @DeleteOperation: In HTTP terms, this endpoint handles DELETE requests
+    
+It’s important to note that although here is shown how to interact with the endpoint using HTTP, the bean will also be
+exposed as an MBean that can be accessed using whatever JMX client you choose. But if you want to limit it to only exposing 
+an HTTP endpoint, you can annotate the endpoint class with _@WebEndpoint_ instead of _@Endpoint_.
+
+### Securing Actuator
+Security is outside of Actuator’s responsibilities, instead, you’ll need to use Spring Security to secure Actuator, and
+because Actuator endpoints are just paths in the application like any other path in the application, there’s nothing unique 
+about securing Actuator versus any other application path.
+The only real problem with securing Actuator this way is that the path to the endpoints is hardcoded as _/actuator/\**_. If
+this were to change because of a change to the _management.endpoints.web.base-path_ property, it would no longer work. To
+help with this, Spring Boot also provides EndpointRequest, to apply the same security requirements for Actuator endpoints
+ without hardcoding the _/actuator/\**_ path:
+ 
+```java
+protected void configure(HttpSecurity http) throws Exception {
+    http.requestMatcher(EndpointRequest.toAnyEndpoint()).authorizeRequests().anyRequest().hasRole("ADMIN").and().httpBasic();
+}
+```
+
+The `EndpointRequest.toAnyEndpoint()` method returns a request matcher that matches any Actuator endpoint. Call `excluding()`
+to exclude specific endpoints:
+
+```java
+protected void configure(HttpSecurity http) throws Exception {
+    http.requestMatcher(EndpointRequest.toAnyEndpoint().excluding("health", "info"))
+        .authorizeRequests()
+        .anyRequest()
+        .hasRole("ADMIN")
+        .and()
+        .httpBasic();
+}
+```
+
+If you wish to apply security to only a handful of Actuator endpoints, use `to()` instead of `toAnyEndpoint()`:
+
+```java
+protected void configure(HttpSecurity http) throws Exception {
+    http.requestMatcher(EndpointRequest.to("beans", "threaddump", "loggers"))
+        .authorizeRequests()
+        .anyRequest()
+        .hasRole("ADMIN")
+        .and()
+        .httpBasic();
+}
+```
+
+## Chapter 17: Administering Spring<a name="Chapter17"></a>
