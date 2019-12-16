@@ -18,6 +18,7 @@
 15. [Chapter 15: Handling failure and latency](#Chapter15)
 16. [Chapter 16: Working with Spring Boot Actuator](#Chapter16)
 17. [Chapter 17: Administering Spring](#Chapter17)
+18. [Chapter 18: Monitoring Spring with JMX](#Chapter18)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -3324,3 +3325,68 @@ protected void configure(HttpSecurity http) throws Exception {
 ```
 
 ## Chapter 17: Administering Spring<a name="Chapter17"></a>
+### Using the Spring Boot Admin
+[Codecentric AG](https://www.codecentric.de/) is a software and consulting company based in Germany, that has a Spring Boot
+Admin frontend web application that makes Actuator endpoints more consumable by humans.  It’s split into two primary
+components: the Spring Boot Admin server and its clients.
+
+#### Creating an Admin server
+To enable the Admin server, you’ll first need to create a new Spring Boot application and add the Admin server dependency
+ to the project’s build and then, annotate the main class with _@EnableAdminServer_:
+ 
+```xml
+<dependency>
+    <groupId>de.codecentric</groupId>
+    <artifactId>spring-boot-admin-starter-server</artifactId>
+</dependency>
+```
+
+#### Registering Admin clients
+The Admin server is an application separate from other Spring Boot application(s) that presents Actuator data, but you
+need to register Spring Boot Admin clients with the Admin server by either explicitly register the application with the
+admin server or letting the Admin server discover the services through the Eureka service registry.
+
+##### Explicitly configuring admin client applications
+You must include the Spring Boot Admin client starter in its build:
+
+```xml
+<dependency>
+    <groupId>de.codecentric</groupId>
+    <artifactId>spring-boot-admin-starter-client</artifactId>
+</dependency>
+```
+
+With this in place, set the _spring.boot.admin.client.url_ property to the root URL of the Admin server. The 
+_spring.application.name_ should be set as well per application.
+
+##### Discovering admin clients
+The only thing you must do to enable the Admin server for discovery of services is to add the Spring Cloud Netflix Eureka
+ Client starter to the Admin server’s build. The Admin server also registers itself as a service with Eureka. To keep this
+  from happening, you can set the _eureka.client.register-with-eureka_ property to false.
+
+### Exploring the Admin server
+The Admin server makes available information of each application such as general health and information, any metrics
+published through micrometer and the _/metrics_ endpoint, environment properties, logging levels for packages and classes, 
+thread tracing details, HTTP traces for requests or audit logs.
+
+### Securing the Admin server
+If the Actuator endpoints require authentication, then the Admin server needs to know the credentials to be able to access
+ those endpoints.
+ 
+#### Enabling login in the Admin server
+Because the Admin server is a Spring Boot application, you can secure it using Spring Security just like you would any
+ other Spring Boot application. You can configure a simple administrative username and password in application.yml to use
+  by the Admin server (_spring.security.user.name_ and _spring.security.user.password_).
+ 
+#### Authenticating with the Actuator
+An Admin server client application can provide its credentials to the Admin server by either registering itself directly
+with the Admin server or by being discovered through Eureka. If the application registers directly with the Admin server, 
+then it can send its credentials to the server at registration time. A few properties needs to be configured to enable that.
+The _spring.boot.admin.client.instance.metadata.user.name_ and _spring.boot .admin.client.instance.metadata.user.password_
+properties specify the credentials that the Admin server can use to access an application’s Actuator endpoints. The username 
+and password properties must be set in each application that registers itself with the Admin server. If your application
+ is discovered by the Admin server via Eureka, then you’ll need to set _eureka.instance.metadata-map.user.name_ and 
+ _eureka.instance.metadata-map.user.password_ instead.
+ 
+
+## Chapter 18: Monitoring Spring with JMX<a name="Chapter18"></a>
