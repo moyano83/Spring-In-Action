@@ -19,6 +19,7 @@
 16. [Chapter 16: Working with Spring Boot Actuator](#Chapter16)
 17. [Chapter 17: Administering Spring](#Chapter17)
 18. [Chapter 18: Monitoring Spring with JMX](#Chapter18)
+19. [Chapter 19: Deploying Spring](#Chapter19)
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -3390,3 +3391,26 @@ and password properties must be set in each application that registers itself wi
  
 
 ## Chapter 18: Monitoring Spring with JMX<a name="Chapter18"></a>
+Java Management Extensions (JMX) has been the standard means of monitoring and managing Java applications. By exposing 
+managed components known as MBeans (managed beans), an external JMX client can manage an application by invoking operations, 
+inspecting properties, and monitoring events from MBeans.
+JMX is automatically enabled by default in a Spring Boot application. As a result, all of the Actuator endpoints are
+ exposed as MBeans.
+ 
+### Working with Actuator MBeans
+Using JConsole, which comes with the Java Develop- ment Kit, you’ll find Actuator MBeans listed under the 
+_org.springframework.boot_ domain. By setting _management.endpoints_.jmx.exposure.include_ and 
+_management.endpoints.jmx.exposure.exclude_ you can control which MBeans to expose.
+
+### Creating your own MBeans
+Spring makes it easy to expose any bean you want as a JMX MBean. All you must do is annotate the bean class with 
+_@ManagedResource_ and then annotate any methods or properties with _@ManagedOperation_ or _@ManagedAttribute_.
+
+### Sending notifications
+MBeans can push notifications to interested JMX clients with Spring’s _NotificationPublisher_. _NotificationPublisher_ has a
+single `sendNotification()` method that, when given a Notification object, publishes the notification to any JMX clients
+that have subscribed to the MBean. For an MBean to be able to publish notifications, it must implement the
+_NotificationPublisherAware_ interface, which requires that a `setNotificationPublisher()` method be implemented.
+
+
+## Chapter 19: Deploying Spring<a name="Chapter19"></a>
