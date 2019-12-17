@@ -20,6 +20,8 @@
 17. [Chapter 17: Administering Spring](#Chapter17)
 18. [Chapter 18: Monitoring Spring with JMX](#Chapter18)
 19. [Chapter 19: Deploying Spring](#Chapter19)
+Appendix. [Bootstrapping Spring applications](Appendix)
+
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -3414,3 +3416,64 @@ _NotificationPublisherAware_ interface, which requires that a `setNotificationPu
 
 
 ## Chapter 19: Deploying Spring<a name="Chapter19"></a>
+### Weighing deployment options
+The deployment choice of how to deploy an application comes down to whether you plan to deploy your application to a
+ traditional Java application server or to a cloud platform:
+
+    * Deploying to Java application servers: Build your application as a WAR file.
+    * Deploying to the cloud: An executable JAR file is the best choice (simpler than the WAR format)
+    
+### Building and deploying WAR files
+So far in this book, an embedded Tomcat server has always been there to serve requests to the application, allowing you to
+not having to deal with creating a web.xml file or servlet initializer class to declare Spring’s DispatcherServlet for
+Spring MVC. If however you need to build a war file, you can create the application through the Initializr which will ensure 
+that the generated project will contain a servlet initializer class and the build file will be geared to produce a WAR file. 
+To create a _DispatcherServlet_, Spring Boot provides _SpringBootServletInitializr_ which is a special Spring Boot-aware
+implementation of Spring’s _WebApplicationInitializer_. This class also looks for any beans in the Spring application 
+context that are of type _Filter_, _Servlet_, or _ServletContextInitializer_ and binds them to the servlet container (you
+just need to create a subclass and override the `configure()` method to specify the Spring configuration class):
+
+```java
+public class IngredientServiceServletInitializer extends SpringBootServletInitializer {
+    @Override
+    protected SpringApplicationBuilder configure(SpringApplicationBuilder builder) { 
+        return builder.sources(IngredientServiceApplication.class);
+    }
+}
+```
+
+Appart of this, you need to include the property _packaging_ with the value _war_ into the _pom.xml_ file. The generated
+ war file can still be executed using `java -jar target/ingredient-service-0.0.19-SNAPSHOT.war`.
+ 
+#### Pushing JAR files to Cloud Foundry
+Cloud Foundry is an open source PaaS platform that originated at Pivotal, in this platform, jar is preferred over WAR. To 
+build and deploy an executable JAR file to Cloud Foundry, you need to register (here)[http://run.pivotal.io], and download
+the cli tools. After login into Cloud Foundry with `cf login -a https://api.run.pivotal.io`, use the following command to
+push your application `cf push <app-name> -p <app-jar>`. The _app-name_ parameter will be used as the subdomain where the
+ application is hosted (`cf push` command offers a `--random-route` option that randomly produces a subdomain for you).
+
+#### Running Spring Boot in a Docker container
+Spotify has created a Maven plugin that allows creating a Docker container from the result of a Spring Boot build:
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>com.spotify</groupId>
+            <artifactId>dockerfile-maven-plugin</artifactId>
+            <version>1.4.3</version>
+            <configuration>
+                <repository> ${docker.image.prefix}/${project.artifactId}</repository> //name of the Docker in Docker repo
+                <buildArgs>
+                    <JAR_FILE>target/${project.build.finalName}.jar</JAR_FILE>
+                </buildArgs>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
+```
+
+Using the Maven wrapper, execute the following goals to build the JAR file, and then build the Docker image: 
+`mvnw package dockerfile:build`.
+
+## Appendix: Bootstrapping Spring applications<a name="Appendix"></a>
