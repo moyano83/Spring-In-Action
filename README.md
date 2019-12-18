@@ -20,8 +20,6 @@
 17. [Chapter 17: Administering Spring](#Chapter17)
 18. [Chapter 18: Monitoring Spring with JMX](#Chapter18)
 19. [Chapter 19: Deploying Spring](#Chapter19)
-Appendix. [Bootstrapping Spring applications](Appendix)
-
 
 
 ## Chapter 1: Getting started with Spring<a name="Chapter1"></a>
@@ -2076,6 +2074,7 @@ two operations results in a Mono of type Boolean.
 
 
 ## Chapter 11: Developing reactive APIs<a name="Chapter11"></a>
+
 ### Working with Spring WebFlux
 Typical Servlet-based web frameworks, such as Spring MVC, are blocking and multithreaded in nature, using a single 
 thread per connection. Asynchronous web frameworks, in contrast, achieve higher scalability with fewer threads—generally 
@@ -2362,6 +2361,7 @@ public ReactiveUserDetailsService userDetailsService(UserRepository userRepo) {
 
 
 ## Chapter 12: Persisting data reactively<a name="Chapter12"></a>
+
 ### Understanding Spring Data’s reactive story
 For now, there’s no support for working with relational databases reactively because that would require that the databases 
 and JDBC drivers involved also support non-blocking reactive models.
@@ -2522,6 +2522,7 @@ One of the benefits of extending _ReactiveCrudRepository_ it’s more portable a
  
 
 ## Chapter 13: Discovering services<a name="Chapter13"></a>
+
 ### Thinking in microservices
 Monolithic applications are deceptively simple, but they present a few challenges:
 
@@ -2670,6 +2671,7 @@ analogous to Spring MVC’s _@RequestMapping_ and _@PathVariable_ but their use 
 
 
 ## Chapter 14: Managing Configuration<a name="Chapter14"></a>
+
 ### Sharing configuration
 In microservice-architected applications, property management is spread across multiple codebases and deployment instances, 
 making it unreasonable to apply the same change in every single instance of multiple services in a running application.
@@ -2943,6 +2945,7 @@ With the appropriate Spring Cloud Bus starter in place, add the appropriate conf
  
 
 ## Chapter 15: Handling failure and latency<a name="Chapter15"></a>
+
 ### Understanding circuit breakers
 The circuit breaker pattern is important in the context of microservices, to avoid letting failures cascade across a
 distributed call stack. A software circuit breaker starts in a closed state, allowing invocations of a method. If that
@@ -3081,6 +3084,7 @@ cluster as value. Turbine dashboard would be available at _http://localhost:<con
  
 
 ## Chapter 16: Working with Spring Boot Actuator<a name="Chapter16"></a>
+
 ### Introducing Actuator
 Using endpoints exposed by Actuator, we can ask things about the internal state of a running Spring Boot application, add:
 
@@ -3328,6 +3332,7 @@ protected void configure(HttpSecurity http) throws Exception {
 ```
 
 ## Chapter 17: Administering Spring<a name="Chapter17"></a>
+
 ### Using the Spring Boot Admin
 [Codecentric AG](https://www.codecentric.de/) is a software and consulting company based in Germany, that has a Spring Boot
 Admin frontend web application that makes Actuator endpoints more consumable by humans.  It’s split into two primary
@@ -3393,6 +3398,7 @@ and password properties must be set in each application that registers itself wi
  
 
 ## Chapter 18: Monitoring Spring with JMX<a name="Chapter18"></a>
+
 Java Management Extensions (JMX) has been the standard means of monitoring and managing Java applications. By exposing 
 managed components known as MBeans (managed beans), an external JMX client can manage an application by invoking operations, 
 inspecting properties, and monitoring events from MBeans.
@@ -3416,6 +3422,7 @@ _NotificationPublisherAware_ interface, which requires that a `setNotificationPu
 
 
 ## Chapter 19: Deploying Spring<a name="Chapter19"></a>
+
 ### Weighing deployment options
 The deployment choice of how to deploy an application comes down to whether you plan to deploy your application to a
  traditional Java application server or to a cloud platform:
@@ -3475,5 +3482,3 @@ Spotify has created a Maven plugin that allows creating a Docker container from 
 
 Using the Maven wrapper, execute the following goals to build the JAR file, and then build the Docker image: 
 `mvnw package dockerfile:build`.
-
-## Appendix: Bootstrapping Spring applications<a name="Appendix"></a>
